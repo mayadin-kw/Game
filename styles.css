@@ -554,17 +554,27 @@ body[data-phase="winner"] {
   grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) minmax(180px, 220px);
   gap: 18px;
   align-items: start;
+  direction: ltr;
 }
 
 .score-panel {
   position: sticky;
   top: 20px;
+  direction: rtl;
 }
 
 .score-panel.active {
   box-shadow:
     0 18px 44px rgba(0, 0, 0, 0.26),
     0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.score-panel.team-slot-0 {
+  grid-column: 1;
+}
+
+.score-panel.team-slot-1 {
+  grid-column: 3;
 }
 
 .team-mark {
@@ -654,6 +664,9 @@ body[data-phase="winner"] {
 .board-center {
   display: grid;
   gap: 18px;
+  grid-column: 2;
+  direction: rtl;
+  min-width: 0;
 }
 
 .board-banner {
@@ -731,6 +744,23 @@ body[data-phase="winner"] {
   opacity: 0.28;
   cursor: not-allowed;
   filter: grayscale(0.2);
+}
+
+.point-button.turn-locked,
+.point-button.turn-locked:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+  filter: saturate(0.72);
+  border-style: dashed;
+}
+
+.point-button.used,
+.point-button.used:disabled,
+.point-button.unavailable,
+.point-button.unavailable:disabled {
+  opacity: 0.2;
+  filter: grayscale(0.45);
+  border-style: solid;
 }
 
 .card-core {
@@ -1044,6 +1074,12 @@ body[data-phase="winner"] {
 
   .score-panel {
     position: static;
+  }
+
+  .score-panel.team-slot-0,
+  .score-panel.team-slot-1,
+  .board-center {
+    grid-column: auto;
   }
 }
 
