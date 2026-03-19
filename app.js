@@ -310,6 +310,9 @@ function renderUploadScreen() {
             >
               بدء اللعبة
             </button>
+            <button class="btn btn-secondary" data-action="download-template">
+              تحميل نموذج إكسل
+            </button>
             ${
               hasLoadedQuestions
                 ? `<button class="btn btn-ghost" data-action="reset-all">تغيير الملف</button>`
@@ -528,22 +531,22 @@ function renderBoardScreen() {
   const remaining = countRemainingSlots(state.board);
   const total = countTotalAvailableSlots(state.board);
   const pendingDoubleTeams = state.teams.filter((team) => team.abilities.double.pending);
-  const boardPrompt = activeTeam
-    ? `الدور الآن على ${activeTeam.name}`
-    : "أول زر يتم اختياره سيحدد من يبدأ المباراة.";
+  const boardPrompt = activeTeam ? `الدور الآن على ${activeTeam.name}` : "";
 
   return `
     <section class="screen">
       <div class="board-view" data-share-root>
-        ${state.teams
-          .map((team, index) => renderScorePanel(team, index, index === state.activeTeamIndex))
-          .join("")}
+        ${renderScorePanel(state.teams[0], 0, 0 === state.activeTeamIndex)}
 
         <div class="board-center">
           <div class="panel board-banner">
             <div class="panel-inner" style="padding:0;">
               <h2 class="section-title">لوحة التحدي</h2>
-              <p class="section-subtitle">${escapeHtml(boardPrompt)}</p>
+              ${
+                boardPrompt
+                  ? `<p class="section-subtitle">${escapeHtml(boardPrompt)}</p>`
+                  : ""
+              }
               <div class="helper-row">
                 <div class="pill">المتبقي: ${formatNumber(remaining)} / ${formatNumber(total)}</div>
                 <div class="pill">اختر من جهة الفريق صاحب الدور فقط</div>
@@ -570,6 +573,8 @@ function renderBoardScreen() {
             <button class="btn btn-ghost" data-action="reset-all">تغيير الملف</button>
           </div>
         </div>
+
+        ${renderScorePanel(state.teams[1], 1, 1 === state.activeTeamIndex)}
       </div>
     </section>
   `;
@@ -620,7 +625,6 @@ function renderQuestionScreen() {
 
         <div class="question-tools">
           <div class="question-tool-group">
-            <span class="question-tool-label">${escapeHtml(team.name)}</span>
             <button
               class="ability-icon ${team.abilities.removeTwo.used ? "used" : ""}"
               type="button"
@@ -636,7 +640,6 @@ function renderQuestionScreen() {
             !opponentTeam.abilities.block.used
               ? `
                 <div class="question-tool-group">
-                  <span class="question-tool-label">${escapeHtml(opponentTeam.name)}</span>
                   <button
                     class="ability-icon danger"
                     type="button"
@@ -843,7 +846,6 @@ function renderFallbackScreen(message) {
 }
 
 function renderScorePanel(team, teamIndex, isActive) {
-  const sideLabel = teamIndex === 0 ? "الجهة اليسرى" : "الجهة اليمنى";
   const turnLabel =
     state.activeTeamIndex === null
       ? "بانتظار تحديد الفريق الذي يبدأ"
@@ -851,16 +853,15 @@ function renderScorePanel(team, teamIndex, isActive) {
         ? "هذا هو الدور الحالي"
         : "بانتظار الدور التالي";
   const canUseDouble =
-    !team.abilities.double.used &&
+    (!team.abilities.double.used || team.abilities.double.pending) &&
     (state.activeTeamIndex === null || state.activeTeamIndex === teamIndex);
 
   return `
     <aside
-      class="score-panel ${isActive ? "active" : ""}"
+      class="score-panel team-slot-${teamIndex} ${isActive ? "active" : ""}"
       style="--team-color:${team.color};border-color:${team.color}33;"
     >
       <div class="team-mark">${escapeHtml(team.name)}</div>
-      <h3>${escapeHtml(sideLabel)}</h3>
       <div class="points-value">${formatNumber(team.points)}</div>
       <div class="turn-badge">${escapeHtml(turnLabel)}</div>
       <div class="team-abilities">
@@ -954,11 +955,7 @@ function renderBoardCard(card) {
         </div>
 
         <div class="card-core">
-          <div>
-            <strong>${escapeHtml(card.name)}</strong>
-            <br />
-            <span>اختر قيمة من جهة الفريق صاحب الدور</span>
-          </div>
+          <div aria-hidden="true"></div>
         </div>
 
         <div class="stack">
@@ -982,9 +979,17 @@ function renderPointButton(card, side, pointValue) {
     "point-button",
     slot?.used ? "used" : "",
     slot?.unavailable ? "unavailable" : "",
+    isLockedByTurn && !slot?.used && !slot?.unavailable ? "turn-locked" : "",
   ]
     .filter(Boolean)
     .join(" ");
+  const title = slot?.used
+    ? "تم استخدام هذا السؤال"
+    : slot?.unavailable
+      ? "لا يوجد سؤال متاح لهذه الخانة"
+      : isLockedByTurn
+        ? `الدور الآن على ${state.teams[state.activeTeamIndex].name}`
+        : team.name;
 
   return `
     <button
@@ -995,7 +1000,7 @@ function renderPointButton(card, side, pointValue) {
       data-category-id="${escapeHtmlAttribute(card.categoryId)}"
       data-side="${side}"
       data-point-value="${pointValue}"
-      title="${escapeHtmlAttribute(team.name)}"
+      title="${escapeHtmlAttribute(title)}"
     >
       ${formatNumber(pointValue)}
     </button>
@@ -1013,6 +1018,9 @@ function onAppClick(event) {
   switch (action) {
     case "start-flow":
       startFlow();
+      break;
+    case "download-template":
+      downloadExcelTemplate();
       break;
     case "toggle-category":
       toggleCategory(actionElement.dataset.categoryId || "");
@@ -1400,12 +1408,16 @@ function activateDoubleForTeam(teamIndex) {
   }
 
   const team = state.teams[teamIndex];
-  if (!team || team.abilities.double.used) {
+  if (!team) {
     return;
   }
 
   if (Number.isInteger(state.activeTeamIndex) && state.activeTeamIndex !== teamIndex) {
     showToast(`الدور الآن على ${state.teams[state.activeTeamIndex].name}.`);
+    return;
+  }
+
+  if (team.abilities.double.used && !team.abilities.double.pending) {
     return;
   }
 
@@ -1416,8 +1428,8 @@ function activateDoubleForTeam(teamIndex) {
           abilities: {
             ...currentTeam.abilities,
             double: {
-              used: true,
-              pending: true,
+              used: !currentTeam.abilities.double.pending,
+              pending: !currentTeam.abilities.double.pending,
             },
           },
         }
@@ -1429,7 +1441,11 @@ function activateDoubleForTeam(teamIndex) {
     teams: updatedTeams,
   });
 
-  showToast(`تم تفعيل دبل النقاط لـ ${team.name}.`);
+  showToast(
+    team.abilities.double.pending
+      ? `تم إلغاء دبل النقاط لـ ${team.name}.`
+      : `تم تفعيل دبل النقاط لـ ${team.name}.`
+  );
 }
 
 function useRemoveTwo() {
@@ -2143,6 +2159,88 @@ function appendSessionQuestionId(questionId, sessionUsedQuestionIds = []) {
     nextIds.add(questionId);
   }
   return Array.from(nextIds);
+}
+
+function downloadExcelTemplate() {
+  if (!window.XLSX) {
+    showToast("مكتبة الإكسل غير جاهزة حاليًا.");
+    return;
+  }
+
+  const questionRows = [
+    ["التصنيف", "السؤال", "الخيارات (أ، ب، ج، د)", "الإجابة الصحيحة", "النقاط"],
+    [
+      "معلومات عامة",
+      "ما هي عاصمة المملكة العربية السعودية؟",
+      "(أ) جدة (ب) الرياض (ج) مكة (د) الدمام",
+      "(ب) الرياض",
+      200,
+    ],
+    [
+      "معلومات عامة",
+      "كم عدد قارات العالم؟",
+      "(أ) 5 (ب) 6 (ج) 7 (د) 8",
+      "(ج) 7",
+      400,
+    ],
+    [
+      "معلومات عامة",
+      "ما أسرع حيوان بري؟",
+      "(أ) الفهد (ب) الأسد (ج) الحصان (د) الذئب",
+      "(أ) الفهد",
+      600,
+    ],
+    [
+      "علوم",
+      "ما الكوكب المعروف بالكوكب الأحمر؟",
+      "(أ) الأرض (ب) المريخ (ج) زحل (د) نبتون",
+      "(ب) المريخ",
+      200,
+    ],
+    [
+      "علوم",
+      "كم عدد الكواكب في المجموعة الشمسية؟",
+      "(أ) 7 (ب) 8 (ج) 9 (د) 10",
+      "(ب) 8",
+      400,
+    ],
+    [
+      "علوم",
+      "ما العنصر الذي يرمز له بالرمز O؟",
+      "(أ) الذهب (ب) الأكسجين (ج) الحديد (د) الهيدروجين",
+      "(ب) الأكسجين",
+      600,
+    ],
+  ];
+
+  const guideRows = [
+    ["ملاحظات الاستخدام"],
+    ["1. استخدم الصف الأول للعناوين كما هو تمامًا."],
+    ["2. القيم المعتمدة للنقاط هي: 200 أو 400 أو 600."],
+    ["3. اكتب الخيارات داخل خلية واحدة بنفس النمط: (أ) ... (ب) ... (ج) ... (د) ..."],
+    ["4. اكتب الإجابة الصحيحة بصيغة مشابهة: (ب) الرياض أو اسم الإجابة نفسها."],
+    ["5. لتفادي نقص الأزرار في اللوحة، وفّر سؤالين على الأقل لكل قيمة داخل كل تصنيف."],
+    ["6. يمكنك حذف صفوف الأمثلة واستبدالها بأسئلتك الخاصة."],
+  ];
+
+  const workbook = window.XLSX.utils.book_new();
+  const questionsSheet = window.XLSX.utils.aoa_to_sheet(questionRows);
+  const guideSheet = window.XLSX.utils.aoa_to_sheet(guideRows);
+
+  questionsSheet["!cols"] = [
+    { wch: 22 },
+    { wch: 44 },
+    { wch: 44 },
+    { wch: 26 },
+    { wch: 12 },
+  ];
+
+  guideSheet["!cols"] = [{ wch: 90 }];
+
+  window.XLSX.utils.book_append_sheet(workbook, questionsSheet, "الأسئلة");
+  window.XLSX.utils.book_append_sheet(workbook, guideSheet, "شرح");
+  window.XLSX.writeFile(workbook, "نموذج-أسئلة-اللعبة.xlsx");
+  showToast("تم تنزيل نموذج الإكسل.");
 }
 
 function isBoardFinished(board) {
