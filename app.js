@@ -2447,7 +2447,6 @@ async function shareCurrentView() {
 
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({
-        title: "ساحة التحدي",
         files: [file],
       });
       showToast("تم فتح لوحة المشاركة.");
