@@ -27,9 +27,72 @@
     </main>
 
     <div id="toast" class="toast" hidden></div>
+    <div id="boot-error" class="boot-error" hidden></div>
 
-    <script defer src="./vendor/xlsx.full.min.js"></script>
-    <script defer src="./vendor/html2canvas.min.js"></script>
-    <script defer src="./app.js"></script>
+    <script>
+      (async function bootstrapSite() {
+        const bootError = document.getElementById("boot-error");
+
+        function showBootError(message) {
+          if (!bootError) return;
+          bootError.hidden = false;
+          bootError.textContent = message;
+        }
+
+        function loadScript(candidates, label) {
+          return new Promise((resolve, reject) => {
+            let currentIndex = 0;
+
+            function tryNext() {
+              if (currentIndex >= candidates.length) {
+                reject(new Error(`تعذر تحميل ${label}. تأكد من وجود ملفاته داخل الموقع.`));
+                return;
+              }
+
+              const script = document.createElement("script");
+              script.src = candidates[currentIndex];
+              script.async = false;
+              currentIndex += 1;
+
+              script.onload = () => resolve(script.src);
+              script.onerror = () => {
+                script.remove();
+                tryNext();
+              };
+
+              document.body.appendChild(script);
+            }
+
+            tryNext();
+          });
+        }
+
+        try {
+          await loadScript(
+            [
+              "./vendor/xlsx.full.min.js",
+              "./Vendor/xlsx.full.min.js",
+              "./xlsx.full.min.js",
+            ],
+            "مكتبة قراءة الإكسل"
+          );
+
+          await loadScript(
+            [
+              "./vendor/html2canvas.min.js",
+              "./Vendor/html2canvas.min.js",
+              "./html2canvas.min.js",
+            ],
+            "مكتبة مشاركة الصور"
+          );
+
+          await loadScript(["./app.js"], "ملف التطبيق");
+        } catch (error) {
+          showBootError(
+            error instanceof Error ? error.message : "تعذر تشغيل الموقع على هذا المسار."
+          );
+        }
+      })();
+    </script>
   </body>
 </html>
