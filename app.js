@@ -2392,7 +2392,7 @@ async function shareCurrentView() {
 
   const isBoardView = shareRoot.classList.contains("board-view");
   const shareWidth = isBoardView ? DESKTOP_SHARE_WIDTH : 980;
-  const shareHeight = Math.max(shareRoot.scrollHeight, shareRoot.offsetHeight, 640);
+  const shareHeight = measureShareContentHeight(shareRoot, shareWidth);
   const hiddenElements = Array.from(shareRoot.querySelectorAll(".no-capture"));
   const previousVisibility = hiddenElements.map((element) => element.style.visibility);
 
@@ -2467,6 +2467,46 @@ async function shareCurrentView() {
       element.style.visibility = previousVisibility[index];
     });
   }
+}
+
+function measureShareContentHeight(shareRoot, shareWidth) {
+  const sandbox = document.createElement("div");
+  sandbox.setAttribute("aria-hidden", "true");
+  sandbox.style.position = "fixed";
+  sandbox.style.left = "-20000px";
+  sandbox.style.top = "0";
+  sandbox.style.width = `${shareWidth}px`;
+  sandbox.style.pointerEvents = "none";
+  sandbox.style.opacity = "0";
+  sandbox.style.zIndex = "-1";
+
+  const clone = shareRoot.cloneNode(true);
+  clone.style.width = `${shareWidth}px`;
+  clone.style.maxWidth = `${shareWidth}px`;
+  clone.style.minWidth = `${shareWidth}px`;
+  clone.style.margin = "0 auto";
+
+  Array.from(clone.querySelectorAll(".no-capture")).forEach((element) => {
+    element.style.display = "none";
+  });
+
+  sandbox.appendChild(clone);
+  document.body.appendChild(sandbox);
+
+  const rootRect = clone.getBoundingClientRect();
+  let maxBottom = 0;
+
+  [clone, ...clone.querySelectorAll("*")].forEach((element) => {
+    const rect = element.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      return;
+    }
+
+    maxBottom = Math.max(maxBottom, rect.bottom - rootRect.top);
+  });
+
+  sandbox.remove();
+  return Math.ceil(Math.max(320, maxBottom + 8));
 }
 
 function showToast(message) {
