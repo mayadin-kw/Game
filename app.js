@@ -3,7 +3,7 @@ const SHUFFLE_MEMORY_KEY = "arena-quiz-shuffle-memory-v1";
 const POINT_VALUES = [200, 400, 600];
 const OPTION_KEYS = ["A", "B", "C", "D"];
 const WRONG_PENALTY = 50;
-const DESKTOP_SHARE_WIDTH = 1440;
+const DESKTOP_SHARE_WIDTH = 1320;
 const ABILITY_META = {
   double: {
     icon: "2×",
@@ -2384,47 +2384,52 @@ function computeFileSignature(arrayBuffer, fileName = "") {
 }
 
 async function shareCurrentView() {
-  if (!window.html2canvas) {
+  const shareRoot = appElement.querySelector("[data-share-root]");
+  if (!shareRoot || !window.html2canvas) {
     showToast("تعذر تجهيز الصورة للمشاركة.");
     return;
   }
 
-  const captureTarget = document.body;
-  const hiddenElements = Array.from(captureTarget.querySelectorAll(".no-capture"));
+  const isBoardView = shareRoot.classList.contains("board-view");
+  const shareWidth = isBoardView ? DESKTOP_SHARE_WIDTH : 980;
+  const shareHeight = Math.max(shareRoot.scrollHeight, shareRoot.offsetHeight, 640);
+  const hiddenElements = Array.from(shareRoot.querySelectorAll(".no-capture"));
   const previousVisibility = hiddenElements.map((element) => element.style.visibility);
-  const pageHeight = Math.max(
-    document.body.scrollHeight,
-    document.body.offsetHeight,
-    document.documentElement.scrollHeight,
-    document.documentElement.offsetHeight,
-    document.documentElement.clientHeight
-  );
 
   try {
     hiddenElements.forEach((element) => {
       element.style.visibility = "hidden";
     });
 
-    const canvas = await window.html2canvas(captureTarget, {
-      backgroundColor: null,
+    const canvas = await window.html2canvas(shareRoot, {
+      backgroundColor: "#07111f",
       scale: 1.35,
       useCORS: true,
-      width: DESKTOP_SHARE_WIDTH,
-      windowWidth: DESKTOP_SHARE_WIDTH,
-      height: pageHeight,
-      windowHeight: pageHeight,
+      width: shareWidth,
+      windowWidth: shareWidth,
+      height: shareHeight,
+      windowHeight: shareHeight,
       scrollX: 0,
       scrollY: 0,
       onclone(clonedDocument) {
+        const clonedShareRoot = clonedDocument.querySelector("[data-share-root]");
+        if (!clonedShareRoot) {
+          return;
+        }
+
+        clonedDocument.body.dataset.captureMode = "desktop";
         const clonedBody = clonedDocument.body;
         const clonedRoot = clonedDocument.documentElement;
-
-        clonedRoot.style.width = `${DESKTOP_SHARE_WIDTH}px`;
-        clonedBody.style.width = `${DESKTOP_SHARE_WIDTH}px`;
-        clonedBody.style.minHeight = `${pageHeight}px`;
+        clonedRoot.style.width = `${shareWidth}px`;
+        clonedBody.style.width = `${shareWidth}px`;
+        clonedBody.style.minHeight = `${shareHeight}px`;
         clonedBody.style.overflow = "visible";
+        clonedShareRoot.style.width = `${shareWidth}px`;
+        clonedShareRoot.style.maxWidth = `${shareWidth}px`;
+        clonedShareRoot.style.minWidth = `${shareWidth}px`;
+        clonedShareRoot.style.margin = "0 auto";
 
-        Array.from(clonedDocument.querySelectorAll(".no-capture")).forEach((element) => {
+        Array.from(clonedShareRoot.querySelectorAll(".no-capture")).forEach((element) => {
           element.style.visibility = "hidden";
         });
       },
