@@ -1049,6 +1049,55 @@ body[data-phase="winner"] {
   text-align: center;
 }
 
+body[data-capture-mode="desktop"] .ambient,
+body[data-capture-mode="desktop"]::before,
+body[data-capture-mode="desktop"]::after {
+  display: none !important;
+}
+
+body[data-capture-mode="desktop"] .panel,
+body[data-capture-mode="desktop"] .game-card,
+body[data-capture-mode="desktop"] .score-panel,
+body[data-capture-mode="desktop"] .question-card,
+body[data-capture-mode="desktop"] .result-card,
+body[data-capture-mode="desktop"] .winner-card,
+body[data-capture-mode="desktop"] .upload-card,
+body[data-capture-mode="desktop"] .summary-card,
+body[data-capture-mode="desktop"] .team-card,
+body[data-capture-mode="desktop"] .category-card,
+body[data-capture-mode="desktop"] .resume-card,
+body[data-capture-mode="desktop"] .card-core,
+body[data-capture-mode="desktop"] .option-button,
+body[data-capture-mode="desktop"] .answer-stat,
+body[data-capture-mode="desktop"] .question-tool-group,
+body[data-capture-mode="desktop"] .pill,
+body[data-capture-mode="desktop"] .turn-badge,
+body[data-capture-mode="desktop"] .team-preview,
+body[data-capture-mode="desktop"] .winner-badge,
+body[data-capture-mode="desktop"] .loser-card {
+  backdrop-filter: none !important;
+  background:
+    linear-gradient(180deg, rgba(20, 30, 49, 0.98), rgba(11, 18, 31, 0.98)) !important;
+}
+
+body[data-capture-mode="desktop"] .result-card.success {
+  background:
+    radial-gradient(circle at top center, rgba(23, 211, 122, 0.18), transparent 38%),
+    rgba(8, 30, 18, 0.98) !important;
+}
+
+body[data-capture-mode="desktop"] .result-card.fail {
+  background:
+    radial-gradient(circle at top center, rgba(255, 92, 92, 0.16), transparent 38%),
+    rgba(34, 8, 12, 0.98) !important;
+}
+
+body[data-capture-mode="desktop"] .result-card.blocked {
+  background:
+    radial-gradient(circle at top center, rgba(255, 178, 61, 0.18), transparent 38%),
+    rgba(37, 20, 7, 0.98) !important;
+}
+
 .empty-state {
   text-align: center;
   padding: 26px;
