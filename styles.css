@@ -1033,6 +1033,22 @@ body[data-phase="winner"] {
   box-shadow: 0 18px 30px rgba(0, 0, 0, 0.3);
 }
 
+.boot-error {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(720px, calc(100vw - 24px));
+  padding: 16px 18px;
+  border-radius: 22px;
+  background: rgba(52, 10, 16, 0.96);
+  border: 1px solid rgba(255, 92, 92, 0.2);
+  color: #ffe0e0;
+  z-index: 40;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.32);
+  text-align: center;
+}
+
 .empty-state {
   text-align: center;
   padding: 26px;
