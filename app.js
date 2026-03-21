@@ -3083,8 +3083,14 @@ function measureShareContentHeight(shareRoot, shareWidth) {
     maxBottom = Math.max(maxBottom, rect.bottom - rootRect.top);
   });
 
+  const intrinsicHeight = Math.max(
+    clone.scrollHeight || 0,
+    clone.offsetHeight || 0,
+    clone.clientHeight || 0
+  );
+
   sandbox.remove();
-  return Math.ceil(Math.max(320, maxBottom + 8));
+  return Math.ceil(Math.max(360, intrinsicHeight, maxBottom + 40));
 }
 
 function showToast(message) {
