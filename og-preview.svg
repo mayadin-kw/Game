@@ -1,0 +1,63 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="120" y1="42" x2="1078" y2="592" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8E9"/>
+      <stop offset="0.45" stop-color="#FFF1CF"/>
+      <stop offset="1" stop-color="#FFE1C4"/>
+    </linearGradient>
+    <linearGradient id="card" x1="247" y1="177" x2="955" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#FFF8EA" stop-opacity="0.96"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="908" y1="84" x2="329" y2="589" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFBE55"/>
+      <stop offset="0.52" stop-color="#FF8F4A"/>
+      <stop offset="1" stop-color="#5FCFC2"/>
+    </linearGradient>
+    <filter id="shadow" x="120" y="104" width="960" height="432" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="18"/>
+      <feGaussianBlur stdDeviation="30"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.631373 0 0 0 0 0.372549 0 0 0 0 0.160784 0 0 0 0.18 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_2"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_2" result="shape"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" rx="36" fill="url(#bg)"/>
+  <circle cx="1044" cy="96" r="98" fill="#FFD76E" fill-opacity="0.3"/>
+  <circle cx="151" cy="530" r="118" fill="#85E0D5" fill-opacity="0.24"/>
+  <circle cx="975" cy="553" r="60" fill="#67C6FF" fill-opacity="0.18"/>
+  <rect x="52" y="52" width="1096" height="526" rx="34" fill="white" fill-opacity="0.22" stroke="white" stroke-opacity="0.36" stroke-width="2"/>
+
+  <g filter="url(#shadow)">
+    <rect x="180" y="146" width="840" height="312" rx="36" fill="url(#card)"/>
+  </g>
+
+  <rect x="214" y="180" width="18" height="244" rx="9" fill="url(#accent)"/>
+  <rect x="888" y="186" width="96" height="96" rx="26" fill="url(#accent)"/>
+  <text x="936" y="248" text-anchor="middle" fill="white" font-family="'Baloo Bhaijaan 2', 'Cairo', sans-serif" font-size="54" font-weight="800">؟</text>
+
+  <text x="846" y="244" text-anchor="end" fill="#6E3A1D" font-family="'Baloo Bhaijaan 2', 'Cairo', sans-serif" font-size="60" font-weight="800">لعبة الأسئلة المباشرة</text>
+  <text x="846" y="298" text-anchor="end" fill="#9B6546" font-family="'Cairo', sans-serif" font-size="28" font-weight="700">ارفع ملف Excel • أنشئ غرفة • شارك الرابط فوراً</text>
+  <text x="846" y="338" text-anchor="end" fill="#9B6546" font-family="'Cairo', sans-serif" font-size="28" font-weight="700">دردشة مباشرة وتحكم كامل لمنشئ الغرفة</text>
+
+  <rect x="260" y="380" width="586" height="56" rx="18" fill="#FFF3DE" stroke="#F8C98B" stroke-width="2"/>
+  <text x="816" y="416" text-anchor="end" fill="#7A4424" font-family="'Cairo', sans-serif" font-size="28" font-weight="700">https://sli0tin.github.io/Game/?room=ABC123</text>
+
+  <rect x="264" y="210" width="180" height="74" rx="22" fill="#FFE5B3"/>
+  <text x="354" y="240" text-anchor="middle" fill="#AA5A21" font-family="'Cairo', sans-serif" font-size="24" font-weight="700">غرف فورية</text>
+  <text x="354" y="267" text-anchor="middle" fill="#7A4424" font-family="'Cairo', sans-serif" font-size="18" font-weight="700">رمز + رابط + مشاركة</text>
+
+  <rect x="468" y="210" width="180" height="74" rx="22" fill="#DDF7FF"/>
+  <text x="558" y="240" text-anchor="middle" fill="#1273B4" font-family="'Cairo', sans-serif" font-size="24" font-weight="700">Excel مباشر</text>
+  <text x="558" y="267" text-anchor="middle" fill="#31546C" font-family="'Cairo', sans-serif" font-size="18" font-weight="700">قراءة تلقائية للأسئلة</text>
+
+  <rect x="672" y="210" width="180" height="74" rx="22" fill="#DDF7E9"/>
+  <text x="762" y="240" text-anchor="middle" fill="#1D8A58" font-family="'Cairo', sans-serif" font-size="24" font-weight="700">لعب جماعي</text>
+  <text x="762" y="267" text-anchor="middle" fill="#2D5A46" font-family="'Cairo', sans-serif" font-size="18" font-weight="700">٤ لاعبين + متفرجون</text>
+
+  <rect x="184" y="84" width="252" height="40" rx="20" fill="white" fill-opacity="0.76"/>
+  <text x="418" y="110" text-anchor="end" fill="#B16B33" font-family="'Cairo', sans-serif" font-size="22" font-weight="700">بطاقة مشاركة للرابط</text>
+</svg>
