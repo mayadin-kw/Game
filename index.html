@@ -86,7 +86,7 @@
             "مكتبة مشاركة الصور"
           );
 
-          await loadScript(["./app.js"], "ملف التطبيق");
+          await import("./app.js");
         } catch (error) {
           showBootError(
             error instanceof Error ? error.message : "تعذر تشغيل الموقع على هذا المسار."
