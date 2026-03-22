@@ -46,6 +46,10 @@ body {
   overflow-x: hidden;
 }
 
+body[data-room="active"] {
+  overflow: hidden;
+}
+
 body::before,
 body::after {
   content: "";
@@ -145,6 +149,18 @@ body[data-phase="winner"] {
   padding: 28px 0 48px;
 }
 
+body[data-room="active"] .app-shell {
+  width: 100vw;
+  height: 100dvh;
+  padding: 10px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+body[data-room="active"] .hero {
+  display: none;
+}
+
 .hero {
   display: flex;
   justify-content: center;
@@ -191,6 +207,267 @@ body[data-phase="winner"] {
 
 .app-stage {
   min-height: 520px;
+}
+
+body[data-room="active"] .app-stage {
+  min-height: 0;
+  height: 100%;
+}
+
+.room-layout {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) minmax(180px, 26dvh);
+  gap: 10px;
+  overflow: hidden;
+}
+
+.room-stage {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.room-stage > .screen {
+  height: 100%;
+}
+
+.room-topbar {
+  overflow: hidden;
+}
+
+.room-topbar-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.room-chip-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.room-actions {
+  justify-content: flex-end;
+}
+
+.room-join-layout,
+.room-lobby-layout {
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
+  gap: 18px;
+}
+
+.room-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    var(--surface-strong);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.24);
+  padding: 20px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.room-roster-block + .room-roster-block {
+  margin-top: 18px;
+}
+
+.room-roster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.room-roster-grid.compact {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.participant-card {
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.participant-card.player {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(0, 0, 0, 0.18)),
+    var(--participant-color);
+  color: var(--participant-text);
+}
+
+.participant-card strong,
+.participant-card span {
+  display: block;
+}
+
+.participant-card strong {
+  margin-bottom: 6px;
+}
+
+.participant-card span {
+  color: inherit;
+  opacity: 0.86;
+  font-size: 0.9rem;
+}
+
+.join-role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.role-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+}
+
+.role-card input {
+  display: none;
+}
+
+.role-card.selected {
+  border-color: rgba(255, 209, 102, 0.34);
+  box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.08);
+}
+
+.role-card.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.join-color-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.join-color-row input {
+  width: 72px;
+  height: 48px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.chat-dock {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-dock-inner {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.chat-dock-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.chat-dock-head h3 {
+  margin: 0;
+}
+
+.chat-dock-head span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.chat-messages {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+}
+
+.chat-message {
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.chat-message.system {
+  background: rgba(255, 209, 102, 0.08);
+  border-color: rgba(255, 209, 102, 0.16);
+}
+
+.chat-message strong,
+.chat-message p {
+  display: block;
+}
+
+.chat-message strong {
+  margin-bottom: 4px;
+}
+
+.chat-message p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.chat-empty {
+  padding: 14px;
+  border-radius: 16px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.chat-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.chat-form.disabled {
+  opacity: 0.6;
+}
+
+.chat-form input {
+  min-width: 0;
+  height: 50px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  padding: 0 16px;
+  font: inherit;
+  font-size: 16px;
+}
+
+body[data-room="active"] .screen {
+  height: 100%;
+}
+
+body[data-room="active"] .board-canvas {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
 .screen {
@@ -1363,6 +1640,11 @@ body[data-capture-mode="desktop"] .result-card.blocked {
     grid-template-columns: 1fr;
   }
 
+  .room-join-layout,
+  .room-lobby-layout {
+    grid-template-columns: 1fr;
+  }
+
   .players-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1389,6 +1671,27 @@ body[data-capture-mode="desktop"] .result-card.blocked {
     padding-bottom: 32px;
   }
 
+  body[data-room="active"] .app-shell {
+    width: 100vw;
+    height: 100dvh;
+    padding: 8px;
+  }
+
+  .room-layout {
+    grid-template-rows: auto minmax(0, 1fr) 185px;
+    gap: 8px;
+  }
+
+  .room-topbar-inner {
+    padding: 12px 14px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .room-actions .btn {
+    flex: 1;
+  }
+
   .hero-copy,
   .panel-inner,
   .upload-card,
@@ -1411,12 +1714,83 @@ body[data-capture-mode="desktop"] .result-card.blocked {
   }
 
   .board-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .players-strip,
   .player-choice-grid,
   .player-choice-grid.compact {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-room="active"] .players-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  body[data-room="active"] .game-card {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  body[data-room="active"] .card-topline {
+    font-size: 0.68rem;
+  }
+
+  body[data-room="active"] .card-title {
+    min-height: auto;
+    font-size: 0.92rem;
+  }
+
+  body[data-room="active"] .single-stack {
+    gap: 7px;
+  }
+
+  body[data-room="active"] .point-button.single {
+    padding: 10px 4px;
+    border-radius: 16px;
+    font-size: 0.82rem;
+  }
+
+  body[data-room="active"] .player-score-card {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  body[data-room="active"] .player-score-name {
+    font-size: 0.96rem;
+  }
+
+  body[data-room="active"] .player-score-points {
+    font-size: 1.55rem;
+  }
+
+  body[data-room="active"] .ability-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+  }
+
+  body[data-room="active"] .question-card,
+  body[data-room="active"] .result-card,
+  body[data-room="active"] .winner-card,
+  body[data-room="active"] .room-card {
+    padding: 16px;
+  }
+
+  body[data-room="active"] .question-text {
+    font-size: 1.35rem;
+    line-height: 1.55;
+  }
+
+  body[data-room="active"] .option-card {
+    padding: 12px 14px;
+    border-radius: 16px;
+    line-height: 1.55;
+  }
+
+  .join-role-grid {
     grid-template-columns: 1fr;
   }
 
