@@ -370,6 +370,10 @@ function render() {
 }
 
 function getBodyPhase() {
+  if (roomContext.roomCode && !roomContext.joinedParticipant) {
+    return "room-join";
+  }
+
   if (state.phase !== "answer") {
     return state.phase;
   }
@@ -414,7 +418,7 @@ function renderRoomHeader() {
           <span class="pill">${escapeHtml(participantLabel)}</span>
         </div>
         <div class="btn-row room-actions no-capture" style="margin-top:0;">
-          <button class="btn btn-secondary" data-action="copy-room-link">نسخ الرابط</button>
+          <button class="btn btn-secondary room-copy-btn" data-action="copy-room-link">نسخ الرابط</button>
           ${
             roomContext.isHost
               ? `<button class="btn btn-ghost" data-action="send-rules">القوانين</button>`
@@ -483,8 +487,7 @@ function renderRoomJoinScreen() {
         <div class="room-card">
           <h2 class="section-title">الانضمام إلى الغرفة</h2>
           <p class="section-subtitle">
-            اكتب اسمك، اختر لونًا غير مستخدم إذا أردت الدخول كلاعب، أو اختر
-            المشاهدة فقط كمتفرج.
+            اكتب اسمك ثم اختر لاعب أو متفرج.
           </p>
 
           ${
@@ -493,9 +496,9 @@ function renderRoomJoinScreen() {
               : ""
           }
 
-          <div class="helper-row">
-            <div class="pill">رمز الغرفة: ${escapeHtml(roomContext.roomCode || "----")}</div>
-            <div class="pill">أماكن اللاعبين المتبقية: ${formatNumber(Math.max(0, 4 - playerCount))}</div>
+          <div class="helper-row room-join-meta">
+            <div class="pill">الغرفة: ${escapeHtml(roomContext.roomCode || "----")}</div>
+            <div class="pill">المقاعد: ${formatNumber(Math.max(0, 4 - playerCount))}</div>
           </div>
 
           <form id="join-room-form" style="margin-top:22px;">
@@ -506,8 +509,17 @@ function renderRoomJoinScreen() {
               maxlength="30"
               value="${escapeHtmlAttribute(roomContext.pendingName || "")}"
               required
-              style="width:100%;margin-top:0;border-radius:16px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text);padding:14px 16px;font:inherit;"
+              style="width:100%;margin-top:0;border-radius:16px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text);padding:13px 16px;font:inherit;"
             />
+
+            <div class="join-color-row">
+              <span>لون اللاعب</span>
+              <input
+                type="color"
+                name="join_color"
+                value="${escapeHtmlAttribute(normalizeColorHex(roomContext.pendingColor) || defaultColor)}"
+              />
+            </div>
 
             <div class="join-role-grid">
               <label class="role-card ${roomContext.pendingRole === "player" ? "selected" : ""} ${
@@ -521,7 +533,7 @@ function renderRoomJoinScreen() {
                   ${playerSlotsAvailable ? "" : "disabled"}
                 />
                 <strong>لاعب</strong>
-                <span>${playerSlotsAvailable ? "سيظهر اسمك ونقاطك داخل المباراة." : "لا توجد أماكن لاعبين متبقية."}</span>
+                <span>${playerSlotsAvailable ? "ستدخل ضمن اللاعبين." : "لا توجد أماكن متبقية."}</span>
               </label>
 
               <label class="role-card ${roomContext.pendingRole === "spectator" || !playerSlotsAvailable ? "selected" : ""}">
@@ -536,17 +548,8 @@ function renderRoomJoinScreen() {
                   }
                 />
                 <strong>متفرج</strong>
-                <span>تشاهد مجريات اللعبة وتشارك في الدردشة فقط.</span>
+                <span>مشاهدة ودردشة فقط.</span>
               </label>
-            </div>
-
-            <div class="join-color-row">
-              <span>لون اللاعب</span>
-              <input
-                type="color"
-                name="join_color"
-                value="${escapeHtmlAttribute(normalizeColorHex(roomContext.pendingColor) || defaultColor)}"
-              />
             </div>
 
             <div class="btn-row">
