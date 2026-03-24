@@ -274,8 +274,16 @@ async function joinRoom() {
 function renderLobby() {
   const room = state.room;
   if (!room) return;
+  if (room.status && room.status !== 'lobby') {
+    state.page = room.status;
+    renderCurrentPage();
+    return;
+  }
   const players = room.players ? Object.values(room.players) : [];
-  const link = `https://sli0tin.github.io/Game/?room=${state.roomId}`;
+  const linkUrl = new URL(window.location.href);
+  linkUrl.search = '';
+  linkUrl.searchParams.set('room', state.roomId);
+  const link = linkUrl.toString();
   const app = getApp();
   app.innerHTML = `
     <div class="h-full w-full flex items-center justify-center p-4">
