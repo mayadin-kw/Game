@@ -3,8 +3,8 @@
  <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta property="og:title" content="الميدان - لعبة الأسئلة الجماعية">
-  <meta property="og:description" content="انضم للعبة الميدان وتحدى أصدقاءك في مواجهة أسئلة سريعة وتنافس جماعي ممتع.">
+  <meta property="og:title" content="ميادين - باقة ألعاب جماعية">
+  <meta property="og:description" content="اختر لعبتك الجماعية المفضلة بين ميدان الأسئلة وميدان الحروف، وابدأ غرفة وتحدَّ أصدقاءك مباشرة.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://sli0tin.github.io/Game/preview-card.png?v=20260324-1">
   <meta property="og:image:url" content="https://sli0tin.github.io/Game/preview-card.png?v=20260324-1">
@@ -13,11 +13,11 @@
   <meta property="og:image:height" content="630">
   <meta property="og:url" content="https://sli0tin.github.io/Game/">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="الميدان - لعبة الأسئلة الجماعية">
-  <meta name="twitter:description" content="انضم للعبة الميدان وتحدى أصدقاءك في مواجهة أسئلة سريعة وتنافس جماعي ممتع.">
+  <meta name="twitter:title" content="ميادين - باقة ألعاب جماعية">
+  <meta name="twitter:description" content="اختر لعبتك الجماعية المفضلة بين ميدان الأسئلة وميدان الحروف، وابدأ غرفة وتحدَّ أصدقاءك مباشرة.">
   <meta name="twitter:image" content="https://sli0tin.github.io/Game/preview-card.png?v=20260324-1">
   <meta name="theme-color" content="#1e3a8a">
-  <title>الميدان</title>
+  <title>ميادين</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='0.9em' font-size='52'%3E%F0%9F%8F%86%3C/text%3E%3C/svg%3E">
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
@@ -74,6 +74,8 @@ const ROOM_SESSION_KEY = 'almaidan-room-session-v1';
 // State
 let state = {
   page: 'home',
+  gameMode: '',
+  lettersPanel: '',
   playerName: '',
   playerId: '',
   roomId: '',
@@ -135,6 +137,8 @@ if (window.elementSdk) {
 // Utility
 function genId() { return Math.random().toString(36).substr(2, 6).toUpperCase(); }
 function getApp() { return document.getElementById('app'); }
+function isQuizMode() { return state.gameMode === 'quiz'; }
+function isLettersMode() { return state.gameMode === 'letters'; }
 function getQuestionRoundKey(q) {
   if (!q) return '';
   return [q.id || '', q.cat || '', q.pts || q.points || '', q.startTime || 'pending'].join('::');
@@ -156,12 +160,32 @@ function clearStageTimeout() {
   clearTimeout(state.stageTimeout);
   state.stageTimeout = null;
 }
-function buildShareLink(roomId = state.roomId) {
+function buildRouteUrl({ game = state.gameMode, room = '', panel = '', token = '' } = {}) {
   const linkUrl = new URL(window.location.href);
   linkUrl.search = '';
   linkUrl.hash = '';
-  linkUrl.searchParams.set('room', roomId);
+  if (game) linkUrl.searchParams.set('game', game);
+  if (room) linkUrl.searchParams.set('room', room);
+  if (panel) linkUrl.searchParams.set('panel', panel);
+  if (token) linkUrl.searchParams.set('token', token);
   return linkUrl.toString();
+}
+function buildShareLink(roomId = state.roomId, extra = {}) {
+  return buildRouteUrl({ room: roomId, ...extra });
+}
+function buildModeLink(game) {
+  return buildRouteUrl({ game });
+}
+function getLettersRoomRef(roomId = state.roomId) {
+  return db.ref('letterRooms/' + roomId);
+}
+function getGameRoomRef(roomId = state.roomId, roomLike = state.room) {
+  const isLettersRoom = roomLike?.game === 'letters' || (isLettersMode() && !roomLike?.game);
+  return db.ref(`${isLettersRoom ? 'letterRooms' : 'rooms'}/${roomId}`);
+}
+function getPresenceRef(roomId = state.roomId, playerId = state.playerId) {
+  const base = isLettersMode() ? 'letterRooms' : 'rooms';
+  return db.ref(`${base}/${roomId}/presence/${playerId}`);
 }
 function setRoomUrl(roomId = state.roomId) {
   if (!roomId) return;
@@ -184,7 +208,8 @@ function persistRoomSession() {
       roomId: state.roomId,
       playerId: state.playerId,
       playerName: state.playerName || '',
-      isHost: !!state.isHost
+      isHost: !!state.isHost,
+      gameMode: state.gameMode || 'quiz'
     }));
   } catch (_) {}
 }
@@ -198,7 +223,7 @@ function stopPresenceTracking(markOffline = true) {
     state.connectedRef.off('value', state.connectedCb);
   }
   if (state.roomId && state.playerId) {
-    const presenceRef = db.ref(`rooms/${state.roomId}/presence/${state.playerId}`);
+    const presenceRef = getPresenceRef();
     presenceRef.onDisconnect().cancel().catch(() => {});
     if (markOffline) {
       presenceRef.update({
@@ -214,7 +239,7 @@ function stopPresenceTracking(markOffline = true) {
 function startPresenceTracking() {
   stopPresenceTracking(false);
   if (!state.roomId || !state.playerId) return;
-  const presenceRef = db.ref(`rooms/${state.roomId}/presence/${state.playerId}`);
+  const presenceRef = getPresenceRef();
   const connectedRef = firebase.database().ref('.info/connected');
   const cb = (snap) => {
     if (snap.val() !== true) return;
@@ -242,6 +267,7 @@ function resetRoomState({ markOffline = false, clearSession = true } = {}) {
   state = {
     ...state,
     page: 'home',
+    lettersPanel: '',
     playerId: '',
     roomId: '',
     isHost: false,
@@ -252,7 +278,7 @@ function resetRoomState({ markOffline = false, clearSession = true } = {}) {
     hostPanelOpen: false,
     evaluatingQuestionKey: ''
   };
-  window.history.replaceState({}, '', window.location.pathname);
+  window.history.replaceState({}, '', state.gameMode ? buildModeLink(state.gameMode) : window.location.pathname);
   renderCurrentPage();
 }
 function formatPresenceStatus(playerId) {
@@ -312,7 +338,7 @@ function renderExitOverlay() {
 }
 function syncExitOverlay() {
   const existing = document.getElementById('exitOverlay');
-  const canShow = !!(state.room && state.page !== 'home' && state.page !== 'admin');
+  const canShow = !!(state.room && state.page !== 'home' && state.page !== 'admin' && state.page !== 'lettersManager' && state.page !== 'lettersLive');
   if (!canShow) {
     existing?.remove();
     return;
@@ -361,7 +387,7 @@ function renderHostOverlay() {
 }
 function syncHostOverlay() {
   const existing = document.getElementById('hostOverlay');
-  const canShow = state.isHost && state.room && state.page !== 'home' && state.page !== 'admin';
+  const canShow = state.isHost && state.room && state.page !== 'home' && state.page !== 'admin' && state.page !== 'lettersManager' && state.page !== 'lettersLive';
   if (!canShow) {
     existing?.remove();
     return;
@@ -397,12 +423,13 @@ function scheduleAnswerAnalysis(expectedQuestionKey, delayMs) {
 async function removePlayerFromRoom(playerId, roomOverride = null) {
   const roomId = roomOverride?.id || state.roomId;
   if (!roomId || !playerId) return false;
-  const room = roomOverride?.players ? roomOverride : state.room || (await db.ref(`rooms/${roomId}`).once('value')).val();
+  const roomRef = getGameRoomRef(roomId, roomOverride || state.room);
+  const room = roomOverride?.players ? roomOverride : state.room || (await roomRef.once('value')).val();
   if (!room?.players?.[playerId]) return false;
 
   const remainingPlayers = Object.values(room.players).filter(p => p.id !== playerId);
   if (remainingPlayers.length === 0) {
-    await db.ref(`rooms/${roomId}`).remove();
+    await roomRef.remove();
     return true;
   }
 
@@ -451,7 +478,7 @@ async function removePlayerFromRoom(playerId, roomOverride = null) {
     updates.answerOrders = null;
   }
 
-  await db.ref(`rooms/${roomId}`).update(updates);
+  await roomRef.update(updates);
   return true;
 }
 async function kickPlayer(playerId) {
@@ -552,11 +579,14 @@ function cleanupListeners() {
 
 // Load questions from Firebase
 async function loadQuestionsFromFirebase() {
-  const snap = await db.ref('questions').once('value');
+  const path = isLettersMode() ? 'letterQuestions' : 'questions';
+  const snap = await db.ref(path).once('value');
   const data = snap.val();
   if (!data) { state.questions = []; state.categories = []; return; }
   state.questions = Object.entries(data).map(([id, q]) => ({ id, ...q }));
-  state.categories = [...new Set(state.questions.map(q => q.category))];
+  state.categories = isLettersMode()
+    ? [...new Set(state.questions.map(q => q.letter).filter(Boolean))]
+    : [...new Set(state.questions.map(q => q.category))];
 }
 
 // Render router
@@ -565,6 +595,8 @@ function renderCurrentPage() {
     case 'home': renderHome(); break;
     case 'admin': renderAdmin(); break;
     case 'lobby': renderLobby(); break;
+    case 'lettersManager': renderLettersManager(); break;
+    case 'lettersLive': renderLettersLive(); break;
     case 'colorPick': renderColorPick(); break;
     case 'catPick': renderCatPick(); break;
     case 'game': renderGame(); break;
@@ -592,7 +624,8 @@ async function restoreRoomSession() {
   if (!saved?.roomId || !saved?.playerId) return false;
 
   try {
-    const snap = await db.ref('rooms/' + saved.roomId).once('value');
+    state.gameMode = saved.gameMode || 'quiz';
+    const snap = (isLettersMode() ? await getLettersRoomRef(saved.roomId).once('value') : await db.ref('rooms/' + saved.roomId).once('value'));
     const room = snap.val();
     if (!room?.players?.[saved.playerId]) {
       clearRoomSession();
@@ -604,9 +637,14 @@ async function restoreRoomSession() {
     state.playerName = room.players[saved.playerId]?.name || saved.playerName || '';
     state.room = room;
     state.isHost = room.host === saved.playerId;
+    state.lettersPanel = '';
     state.hostPanelOpen = false;
     state.page = room.status || 'lobby';
-    listenRoom(state.roomId);
+    if (isLettersMode()) {
+      listenLettersRoom(state.roomId);
+    } else {
+      listenRoom(state.roomId);
+    }
     startPresenceTracking();
     persistRoomSession();
     setRoomUrl(state.roomId);
@@ -620,24 +658,110 @@ async function restoreRoomSession() {
 // Check URL for room
 function checkUrlForRoom() {
   const params = new URLSearchParams(window.location.search);
+  const game = params.get('game') || '';
   const roomId = params.get('room');
+  const panel = params.get('panel') || '';
+  const token = params.get('token') || '';
+  if (game) state.gameMode = game;
+  if (game === 'letters' && roomId && panel) {
+    bootstrapLettersPanel(roomId, panel, token);
+    return;
+  }
   if (roomId) {
     state.roomId = roomId;
     state.page = 'home';
     renderHome(true);
     return;
   }
+  if (game) {
+    state.page = 'home';
+    renderCurrentPage();
+    return;
+  }
   renderCurrentPage();
 }
 
 // ====== HOME PAGE ======
+function selectGame(game) {
+  state.gameMode = game;
+  state.page = 'home';
+  window.history.replaceState({}, '', buildModeLink(game));
+  renderCurrentPage();
+}
+
+function goLanding() {
+  state.gameMode = '';
+  state.page = 'home';
+  window.history.replaceState({}, '', window.location.pathname);
+  renderCurrentPage();
+}
+
+function renderGamesLanding() {
+  const app = getApp();
+  app.innerHTML = `
+    <div class="min-h-full w-full px-4 py-8">
+      <div class="max-w-5xl mx-auto fade-in">
+        <div class="text-center mb-8">
+          <p class="text-sm font-black tracking-[0.35em] text-slate-400 mb-3">MIYADEEN</p>
+          <h1 class="text-5xl md:text-6xl font-black text-slate-900 mb-3">ميادين</h1>
+          <p class="text-slate-500 text-lg">بوابة ألعاب جماعية بنفس الروح التنافسية، مع أوضاع لعب مختلفة تحت ثيم واحد.</p>
+        </div>
+        <div class="grid gap-5 md:grid-cols-2">
+          <button onclick="selectGame('quiz')" class="text-right rounded-[2rem] overflow-hidden border border-slate-200 bg-white/90 shadow-xl hover:-translate-y-1 transition">
+            <div class="grid md:grid-cols-[180px_1fr] items-stretch">
+              <div class="bg-gradient-to-br from-indigo-600 via-indigo-500 to-sky-400 p-4 flex items-center justify-center">
+                <img src="preview-card.png" alt="ميدان الأسئلة" class="w-full max-w-[150px] rounded-2xl shadow-2xl object-cover aspect-[1/1]">
+              </div>
+              <div class="p-6">
+                <div class="flex items-center gap-3 mb-3">
+                  <span class="text-3xl">⚔️</span>
+                  <h2 class="text-3xl font-black text-slate-900">ميدان الأسئلة</h2>
+                </div>
+                <p class="text-slate-500 leading-8">لعبة الأسئلة الجماعية الحالية: غرف، لاعبين، ألوان، تصنيفات، لوحة نقاط، وأسئلة متتابعة مع أسرع إجابة.</p>
+              </div>
+            </div>
+          </button>
+          <button onclick="selectGame('letters')" class="text-right rounded-[2rem] overflow-hidden border border-slate-200 bg-white/90 shadow-xl hover:-translate-y-1 transition">
+            <div class="grid md:grid-cols-[180px_1fr] items-stretch">
+              <div class="bg-gradient-to-br from-emerald-600 via-emerald-500 to-lime-300 p-4 flex items-center justify-center">
+                <div class="relative w-[150px] h-[150px] rounded-[2rem] bg-white/20 backdrop-blur border border-white/30 shadow-2xl flex items-center justify-center">
+                  <div class="grid grid-cols-3 gap-2 rotate-6">
+                    ${['أ','ب','ت','ث','ج','ح','خ','د','ذ'].map(letter => `
+                      <div class="w-10 h-9 bg-[#fff9c4] text-slate-900 font-black text-xl flex items-center justify-center" style="clip-path:polygon(25% 6%,75% 6%,100% 50%,75% 94%,25% 94%,0 50%)">${letter}</div>
+                    `).join('')}
+                  </div>
+                </div>
+              </div>
+              <div class="p-6">
+                <div class="flex items-center gap-3 mb-3">
+                  <span class="text-3xl">🔤</span>
+                  <h2 class="text-3xl font-black text-slate-900">ميدان الحروف</h2>
+                </div>
+                <p class="text-slate-500 leading-8">لوحة خلية حروف مباشرة تُدار من رابط مدير خاص، مع بث حي منفصل للوحة فقط، وأسئلة تُسحب بحسب الحرف الذي يختاره المدير.</p>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>`;
+}
+
 function renderHome(joinMode = false) {
+  if (!state.gameMode) {
+    renderGamesLanding();
+    return;
+  }
+  if (isLettersMode()) {
+    renderLettersHome(joinMode);
+    return;
+  }
   const app = getApp();
   app.innerHTML = `
     <div class="h-full w-full flex items-center justify-center p-4">
       <div class="fade-in text-center max-w-md w-full">
+        <button onclick="goLanding()" class="mb-5 px-4 py-2 bg-white/80 border border-slate-200 rounded-full text-sm font-black text-slate-600 hover:bg-white transition">↩ العودة إلى ميادين</button>
         <div class="text-7xl mb-4">⚔️</div>
-        <h1 class="text-5xl font-black text-indigo-700 mb-2">${config.game_title || 'الميدان'}</h1>
+        <h1 class="text-5xl font-black text-indigo-700 mb-2">ميدان الأسئلة</h1>
         <p class="text-gray-500 mb-8 text-lg">تحدَّ أصدقاءك في عالم الأسئلة!</p>
         <div class="bg-white rounded-2xl shadow-lg p-6 space-y-4">
           <input id="nameInput" type="text" placeholder="اكتب اسمك هنا..." maxlength="20"
@@ -659,7 +783,117 @@ function renderHome(joinMode = false) {
     </div>`;
 }
 
+function renderLettersHome(joinMode = false) {
+  const app = getApp();
+  app.innerHTML = `
+    <div class="h-full w-full flex items-center justify-center p-4">
+      <div class="fade-in text-center max-w-md w-full">
+        <button onclick="goLanding()" class="mb-5 px-4 py-2 bg-white/80 border border-slate-200 rounded-full text-sm font-black text-slate-600 hover:bg-white transition">↩ العودة إلى ميادين</button>
+        <div class="text-7xl mb-4">🔤</div>
+        <h1 class="text-5xl font-black text-emerald-700 mb-2">ميدان الحروف</h1>
+        <p class="text-gray-500 mb-8 text-lg">مدير يتحكم بالخلية، وبث مباشر منفصل للوحة الحروف.</p>
+        <div class="bg-white rounded-2xl shadow-lg p-6 space-y-4">
+          <input id="nameInput" type="text" placeholder="اكتب اسمك هنا..." maxlength="20"
+            class="w-full px-4 py-3 rounded-xl border-2 border-emerald-100 focus:border-emerald-400 outline-none text-center text-lg transition" value="${state.playerName}">
+          ${joinMode && state.roomId ? `
+            <button onclick="joinRoom()" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-lg transition">
+              🚪 انضم للغرفة
+            </button>
+          ` : `
+            <button onclick="createRoom()" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-lg transition">
+              🎮 إنشاء غرفة
+            </button>
+          `}
+        </div>
+        <button id="adminBtn" onclick="goAdmin()" class="hidden mt-6 px-6 py-2 bg-gray-800 text-white rounded-lg text-sm font-bold hover:bg-gray-700 transition">
+          🔐 Admin
+        </button>
+      </div>
+    </div>`;
+}
+
+function buildLettersBoardState() {
+  const lettersPool = state.questions.map(q => (q.letter || '').toString().trim()).filter(Boolean);
+  const source = lettersPool.length ? lettersPool : ['أ','ب','ت','ث','ج','ح','خ','د','ذ','ر','ز','س','ش','ص','ض','ط','ظ','ع','غ','ف','ق','ك','ل','م','ن'];
+  const cells = {};
+  for (let i = 0; i < 25; i++) {
+    const letter = source[Math.floor(Math.random() * source.length)];
+    cells[`c${i}`] = { id: `c${i}`, index: i, letter, owner: '' };
+  }
+  return {
+    currentCellId: '',
+    currentQuestion: null,
+    usedQuestionIds: {},
+    cells
+  };
+}
+
+async function createLettersRoom() {
+  const name = document.getElementById('nameInput').value.trim();
+  if (!name) { shakeEl('nameInput'); return; }
+  state.playerName = name;
+  state.playerId = genId();
+  state.roomId = genId();
+  state.isHost = true;
+  state.lettersPanel = '';
+  state.hostPanelOpen = false;
+  await loadQuestionsFromFirebase();
+  if (!state.questions.length) {
+    showToast('أضف أسئلة الحروف من لوحة الإدارة أولًا');
+    return;
+  }
+  const roomData = {
+    id: state.roomId,
+    game: 'letters',
+    host: state.playerId,
+    status: 'lobby',
+    managerKey: genId() + genId(),
+    liveKey: genId() + genId(),
+    players: {
+      [state.playerId]: { name, id: state.playerId, emoji: PLAYER_EMOJIS[0], color: '', score: 0, ready: false }
+    },
+    letters: buildLettersBoardState(),
+    created: Date.now()
+  };
+  await getLettersRoomRef(state.roomId).set(roomData);
+  listenLettersRoom(state.roomId);
+  startPresenceTracking();
+  persistRoomSession();
+  setRoomUrl();
+  state.page = 'lobby';
+  renderCurrentPage();
+}
+
+async function joinLettersRoom() {
+  const name = document.getElementById('nameInput').value.trim();
+  if (!name) { shakeEl('nameInput'); return; }
+  const snap = await getLettersRoomRef(state.roomId).once('value');
+  const room = snap.val();
+  if (!room) { showToast('الغرفة غير موجودة'); return; }
+  const playerCount = room.players ? Object.keys(room.players).length : 0;
+  if (playerCount >= 8) { showToast('الغرفة ممتلئة'); return; }
+  state.playerName = name;
+  state.playerId = genId();
+  state.isHost = false;
+  state.lettersPanel = '';
+  state.hostPanelOpen = false;
+  const idx = playerCount;
+  await getLettersRoomRef(state.roomId).child('players/' + state.playerId).set({
+    name, id: state.playerId, emoji: PLAYER_EMOJIS[idx % PLAYER_EMOJIS.length] || '😀', color: '', score: 0, ready: false
+  });
+  listenLettersRoom(state.roomId);
+  startPresenceTracking();
+  persistRoomSession();
+  setRoomUrl();
+  state.page = 'lobby';
+  renderCurrentPage();
+}
+
 async function createRoom() {
+  if (isLettersMode()) {
+    await createLettersRoom();
+    return;
+  }
   const name = document.getElementById('nameInput').value.trim();
   if (!name) { shakeEl('nameInput'); return; }
   state.playerName = name;
@@ -687,6 +921,10 @@ async function createRoom() {
 }
 
 async function joinRoom() {
+  if (isLettersMode()) {
+    await joinLettersRoom();
+    return;
+  }
   const name = document.getElementById('nameInput').value.trim();
   if (!name) { shakeEl('nameInput'); return; }
   const snap = await db.ref('rooms/' + state.roomId).once('value');
@@ -713,6 +951,10 @@ async function joinRoom() {
 
 // ====== LOBBY ======
 function renderLobby() {
+  if (isLettersMode()) {
+    renderLettersLobby();
+    return;
+  }
   const room = state.room;
   if (!room) return;
   if (room.status && room.status !== 'lobby') {
@@ -762,6 +1004,283 @@ function renderLobby() {
         ` : `
           <p class="text-gray-400 text-sm">بانتظار لاعب آخر على الأقل...</p>
         `}
+      </div>
+    </div>`;
+}
+
+function getLettersPlayerLink(roomId = state.roomId) {
+  return buildRouteUrl({ game: 'letters', room: roomId });
+}
+
+function getLettersManagerLink(room = state.room) {
+  return buildRouteUrl({ game: 'letters', room: room?.id || state.roomId, panel: 'manager', token: room?.managerKey || '' });
+}
+
+function getLettersLiveLink(room = state.room) {
+  return buildRouteUrl({ game: 'letters', room: room?.id || state.roomId, panel: 'live', token: room?.liveKey || '' });
+}
+
+function renderLettersLobby() {
+  const room = state.room;
+  if (!room) return;
+  const players = room.players ? Object.values(room.players) : [];
+  const joinLink = getLettersPlayerLink(room.id);
+  const managerLink = getLettersManagerLink(room);
+  const liveLink = getLettersLiveLink(room);
+  const app = getApp();
+  app.innerHTML = `
+    <div class="h-full w-full flex items-center justify-center p-4">
+      <div class="fade-in text-center max-w-3xl w-full">
+        <h2 class="text-3xl font-black text-emerald-700 mb-1">🔤 ميدان الحروف</h2>
+        <p class="text-gray-400 mb-4">غرفة الحروف</p>
+        <div class="grid gap-4 md:grid-cols-3 mb-4">
+          ${[
+            { title: 'رابط اللاعبين', value: joinLink, bg: 'from-emerald-500 to-teal-500' },
+            { title: 'رابط المدير', value: managerLink, bg: 'from-amber-500 to-orange-500' },
+            { title: 'رابط البث المباشر', value: liveLink, bg: 'from-rose-500 to-red-500' }
+          ].map(item => `
+            <div class="bg-white rounded-2xl shadow-lg p-4 text-right">
+              <div class="h-2 rounded-full bg-gradient-to-l ${item.bg} mb-3"></div>
+              <p class="text-sm font-black text-slate-700 mb-2">${item.title}</p>
+              <input readonly value="${item.value}" class="w-full px-3 py-2 bg-slate-50 rounded-lg text-[11px] text-slate-600 outline-none mb-2">
+              <button onclick="navigator.clipboard.writeText('${item.value}');showToast('تم نسخ الرابط')" class="w-full py-2 rounded-xl bg-slate-900 text-white text-sm font-black hover:bg-slate-800 transition">نسخ الرابط</button>
+            </div>
+          `).join('')}
+        </div>
+        <div class="bg-white rounded-2xl shadow-lg p-5 mb-4">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-sm text-gray-500">رمز الغرفة</span>
+            <span class="text-2xl font-black tracking-widest text-emerald-600">${state.roomId}</span>
+          </div>
+          <div class="flex justify-center gap-6 flex-wrap">
+            ${players.map(p => `
+              <div class="text-center">
+                <div class="text-4xl mb-1">${p.emoji}</div>
+                <p class="text-sm font-bold ${p.id === state.playerId ? 'text-emerald-600' : 'text-gray-700'}">${p.name}</p>
+                ${renderPresenceBadge(p.id)}
+                ${p.id === room.host ? '<span class="text-xs text-amber-500">👑 المضيف</span>' : ''}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        <div class="flex flex-col md:flex-row gap-3 justify-center">
+          ${state.isHost ? `<a href="${managerLink}" target="_blank" rel="noopener noreferrer" class="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-black transition">فتح لوحة المدير</a>` : ''}
+          <a href="${liveLink}" target="_blank" rel="noopener noreferrer" class="px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-black transition">فتح البث المباشر</a>
+        </div>
+      </div>
+    </div>`;
+}
+
+function getLettersCells(room = state.room) {
+  const cells = room?.letters?.cells ? Object.values(room.letters.cells) : [];
+  return cells.sort((a, b) => Number(a.index || 0) - Number(b.index || 0));
+}
+
+function getLettersColumns(room = state.room) {
+  const cells = getLettersCells(room);
+  const cols = [];
+  for (let i = 0; i < 5; i++) cols.push(cells.slice(i * 5, (i + 1) * 5));
+  return cols;
+}
+
+function getLettersCellColor(cell, room = state.room) {
+  const currentCellId = room?.letters?.currentCellId || '';
+  if (!cell) return '#fff9c4';
+  if (cell.owner === 'green') return '#16a34a';
+  if (cell.owner === 'red') return '#ef4444';
+  if (cell.id === currentCellId) return '#facc15';
+  return '#fff9c4';
+}
+
+function renderLettersHex({ content = '', bg = '#fff9c4', textColor = '#111827', onClick = '', compact = false, title = '' } = {}) {
+  const tag = onClick ? 'button' : 'div';
+  const sizeClass = compact ? 'w-[58px] h-[50px] md:w-[72px] md:h-[62px]' : 'w-[84px] h-[72px] md:w-[112px] md:h-[96px]';
+  return `<${tag} ${onClick ? `onclick="${onClick}"` : ''} ${title ? `title="${title}"` : ''} class="${sizeClass} flex items-center justify-center font-black text-4xl md:text-6xl transition ${onClick ? 'hover:scale-[1.03] cursor-pointer' : ''}" style="background:${bg};color:${textColor};clip-path:polygon(25% 6%,75% 6%,100% 50%,75% 94%,25% 94%,0 50%);border:4px solid #111827;">${content}</${tag}>`;
+}
+
+function renderLettersBoard(room = state.room, { interactive = false } = {}) {
+  const columns = getLettersColumns(room);
+  const renderColumn = (cells, index) => `
+    <div class="flex flex-col ${index % 2 ? 'mt-8 md:mt-10' : ''}">
+      ${cells.map((cell, cellIndex) => `
+        <div style="${cellIndex ? 'margin-top:-10px' : ''}">
+          ${renderLettersHex({
+            content: cell.letter,
+            bg: getLettersCellColor(cell, room),
+            textColor: cell.owner ? '#ffffff' : '#111827',
+            onClick: interactive && !cell.owner ? `selectLettersCell('${cell.id}')` : '',
+            title: interactive && !cell.owner ? 'اختر هذا الحرف' : ''
+          })}
+        </div>
+      `).join('')}
+    </div>`;
+  const redStack = Array.from({ length: 7 }).map((_, idx) => `
+    <div style="${idx ? 'margin-top:-10px' : ''}">${renderLettersHex({ bg: '#ef4444', compact: true })}</div>
+  `).join('');
+  const greenCaps = Array.from({ length: 5 }).map(() => renderLettersHex({ bg: '#16a34a', compact: true })).join('');
+  return `
+    <div class="rounded-[2.5rem] bg-[#111827] p-3 md:p-4 shadow-2xl overflow-hidden">
+      <div class="flex items-center justify-center gap-1 md:gap-2">
+        <div class="flex flex-col">${redStack}</div>
+        <div class="flex-1 min-w-0">
+          <div class="flex justify-center gap-1 md:gap-2 mb-[-8px] md:mb-[-12px]">${greenCaps}</div>
+          <div class="flex justify-center gap-1 md:gap-2 items-start">
+            ${columns.map((column, index) => renderColumn(column, index)).join('')}
+          </div>
+          <div class="flex justify-center gap-1 md:gap-2 mt-[-8px] md:mt-[-12px]">${greenCaps}</div>
+        </div>
+        <div class="flex flex-col">${redStack}</div>
+      </div>
+    </div>`;
+}
+
+async function listenLettersRoom(roomId) {
+  cleanupListeners();
+  const ref = getLettersRoomRef(roomId);
+  const cb = ref.on('value', snap => {
+    const data = snap.val();
+    if (!data) {
+      resetRoomState();
+      return;
+    }
+    state.room = data;
+    if (!state.lettersPanel && state.playerId) {
+      if (data.players && !data.players[state.playerId]) {
+        resetRoomState();
+        showToast('تم إخراجك من الغرفة');
+        return;
+      }
+      state.isHost = data.host === state.playerId;
+      state.playerName = data.players?.[state.playerId]?.name || state.playerName;
+      persistRoomSession();
+      setRoomUrl(data.id || state.roomId);
+    }
+    renderCurrentPage();
+  });
+  state.listeners.push({ ref, cb });
+}
+
+async function bootstrapLettersPanel(roomId, panel, token) {
+  const snap = await getLettersRoomRef(roomId).once('value');
+  const room = snap.val();
+  if (!room) {
+    showToast('غرفة الحروف غير موجودة');
+    goLanding();
+    return;
+  }
+  const valid = panel === 'manager' ? token === room.managerKey : token === room.liveKey;
+  if (!valid) {
+    showToast('الرابط غير صالح');
+    goLanding();
+    return;
+  }
+  state.gameMode = 'letters';
+  state.lettersPanel = panel;
+  state.roomId = roomId;
+  state.room = room;
+  state.page = panel === 'manager' ? 'lettersManager' : 'lettersLive';
+  await listenLettersRoom(roomId);
+  renderCurrentPage();
+}
+
+async function selectLettersCell(cellId) {
+  const room = state.room;
+  if (!room || state.page !== 'lettersManager') return;
+  const cell = room.letters?.cells?.[cellId];
+  if (!cell || cell.owner) return;
+  const snap = await db.ref('letterQuestions').orderByChild('letter').equalTo(cell.letter).once('value');
+  const questions = snap.val() ? Object.entries(snap.val()).map(([id, item]) => ({ id, ...item })) : [];
+  const used = room.letters?.usedQuestionIds || {};
+  let available = questions.filter(item => !used[item.id]);
+  if (!available.length) available = questions;
+  const picked = available[Math.floor(Math.random() * available.length)];
+  if (!picked) {
+    showToast(`لا توجد أسئلة للحرف ${cell.letter}`);
+    return;
+  }
+  await getLettersRoomRef().child('letters').update({
+    currentCellId: cellId,
+    currentQuestion: {
+      id: picked.id,
+      letter: picked.letter,
+      question: picked.question,
+      answer: picked.answer || ''
+    }
+  });
+}
+
+async function claimLettersCell(team) {
+  const room = state.room;
+  const currentCellId = room?.letters?.currentCellId;
+  const currentQuestion = room?.letters?.currentQuestion;
+  if (!currentCellId || !currentQuestion?.id) {
+    showToast('اختر حرفًا أولًا');
+    return;
+  }
+  await getLettersRoomRef().update({
+    [`letters/cells/${currentCellId}/owner`]: team,
+    [`letters/usedQuestionIds/${currentQuestion.id}`]: true,
+    [`letters/currentQuestion/claimedBy`]: team
+  });
+}
+
+async function clearLettersSelection() {
+  if (!state.roomId) return;
+  await getLettersRoomRef().child('letters').update({
+    currentCellId: '',
+    currentQuestion: null
+  });
+}
+
+function renderLettersManager() {
+  const room = state.room;
+  if (!room) return;
+  const q = room.letters?.currentQuestion;
+  const app = getApp();
+  app.innerHTML = `
+    <div class="min-h-full w-full p-4 md:p-6" style="background:linear-gradient(135deg,#f8fafc,#ecfccb)">
+      <div class="max-w-6xl mx-auto space-y-5">
+        <div class="text-center">
+          <p class="text-sm font-black tracking-[0.2em] text-emerald-700 mb-2">لوحة المدير</p>
+          <h2 class="text-4xl font-black text-slate-900">ميدان الحروف</h2>
+        </div>
+        ${renderLettersBoard(room, { interactive: true })}
+        <div class="bg-white rounded-3xl shadow-xl p-5">
+          <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
+            <div>
+              <p class="text-sm text-slate-400">الحرف المختار</p>
+              <p class="text-2xl font-black text-slate-900">${q?.letter || '—'}</p>
+            </div>
+            <button onclick="clearLettersSelection()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-black hover:bg-slate-200 transition">إلغاء التحديد</button>
+          </div>
+          <div class="min-h-[110px] rounded-2xl bg-slate-50 p-4 border border-slate-200">
+            ${q ? `
+              <p class="text-xl font-black text-slate-900 leading-9">${q.question}</p>
+              <p class="text-sm text-slate-400 mt-2">الإجابة: ${q.answer || 'غير محددة'}</p>
+            ` : `
+              <p class="text-slate-400 font-bold text-center py-8">اضغط على حرف لعرض سؤاله</p>
+            `}
+          </div>
+          <div class="mt-4">
+            <p class="text-sm font-black text-slate-500 mb-3">من الذي أجاب؟</p>
+            <div class="grid md:grid-cols-2 gap-3">
+              <button onclick="claimLettersCell('green')" class="py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-lg transition">الفريق الأخضر</button>
+              <button onclick="claimLettersCell('red')" class="py-4 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-black text-lg transition">الفريق الأحمر</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderLettersLive() {
+  const room = state.room;
+  if (!room) return;
+  const app = getApp();
+  app.innerHTML = `
+    <div class="min-h-full w-full flex items-center justify-center p-3 md:p-6" style="background:radial-gradient(circle at top,#f8fafc,#e2e8f0)">
+      <div class="w-full max-w-6xl">
+        ${renderLettersBoard(room, { interactive: false })}
       </div>
     </div>`;
 }
@@ -1478,9 +1997,185 @@ async function sendChat(e) {
 }
 
 // ====== ADMIN ======
-function goAdmin() { state.page = 'admin'; renderCurrentPage(); }
+async function goAdmin() {
+  await loadQuestionsFromFirebase();
+  state.page = 'admin';
+  renderCurrentPage();
+}
+
+function renderLettersAdmin() {
+  const app = getApp();
+  app.innerHTML = `
+    <div class="h-full w-full overflow-auto p-4">
+      <div class="max-w-4xl mx-auto fade-in">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-2xl font-black text-emerald-700">🔐 إدارة ميدان الحروف</h2>
+          <button onclick="exitAdmin()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg font-bold text-sm transition">🚪 خروج</button>
+        </div>
+        <div class="bg-white rounded-xl shadow p-5 mb-4">
+          <h3 class="font-bold text-lg mb-3">📤 رفع ملف Excel</h3>
+          <p class="text-xs text-gray-400 mb-2">التنسيق: الحرف / السؤال / الجواب</p>
+          <div class="flex flex-wrap gap-2 mb-3">
+            <button onclick="downloadLettersTemplate()" class="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-lg font-black text-sm hover:bg-emerald-200 transition">⬇️ تحميل نموذج Excel</button>
+          </div>
+          <input type="file" accept=".xlsx,.xls,.csv" onchange="handleLettersFileUpload(event)" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-emerald-50 file:text-emerald-600 file:font-bold hover:file:bg-emerald-100">
+          <div id="uploadProgress" class="hidden mt-3">
+            <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div id="uploadBar" class="h-full bg-emerald-500 rounded-full transition-all" style="width:0%"></div>
+            </div>
+            <p class="text-sm text-gray-500 mt-1" id="uploadStatus">جاري التحميل...</p>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl shadow p-5 mb-4">
+          <h3 class="font-bold text-lg mb-3">🔤 الحروف (${state.categories.length})</h3>
+          <div class="flex flex-wrap gap-2">
+            ${state.categories.map(letter => `
+              <div class="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 rounded-full">
+                <span class="text-sm font-bold text-emerald-700">${letter}</span>
+                <button onclick="deleteLettersLetter('${letter.replace(/'/g, "\\'")}')" class="text-red-400 hover:text-red-600 text-xs ml-1">✕</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        <div class="bg-white rounded-xl shadow p-5">
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <h3 class="font-bold text-lg">❓ أسئلة الحروف (${state.questions.length})</h3>
+            <div class="flex gap-2">
+              <select onchange="state.adminFilter=this.value;renderAdmin()" class="px-3 py-1.5 border rounded-lg text-sm outline-none">
+                <option value="">كل الحروف</option>
+                ${state.categories.map(letter => `<option value="${letter}" ${state.adminFilter === letter ? 'selected' : ''}>${letter}</option>`).join('')}
+              </select>
+              <input type="text" placeholder="بحث..." value="${state.adminSearch || ''}" oninput="state.adminSearch=this.value;renderAdmin()" class="px-3 py-1.5 border rounded-lg text-sm outline-none w-36">
+            </div>
+          </div>
+          <div class="space-y-2 max-h-96 overflow-auto">
+            ${getFilteredLettersQuestions().map(q => `
+              <div class="flex items-start justify-between p-3 bg-gray-50 rounded-lg">
+                <div class="flex-1">
+                  <span class="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">${q.letter}</span>
+                  <p class="text-sm font-bold mt-1">${q.question}</p>
+                  <p class="text-xs text-green-600 mt-1">✓ ${q.answer}</p>
+                </div>
+                <div class="flex gap-1 mr-2">
+                  <button onclick="editLettersQuestion('${q.id}')" class="px-2 py-1 text-xs bg-blue-100 text-blue-600 rounded hover:bg-blue-200">تعديل</button>
+                  <button onclick="deleteLettersQuestion('${q.id}')" class="px-2 py-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200">حذف</button>
+                </div>
+              </div>
+            `).join('')}
+            ${getFilteredLettersQuestions().length === 0 ? '<p class="text-gray-400 text-sm text-center py-4">لا توجد أسئلة</p>' : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="editModal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"></div>`;
+}
+
+function getFilteredLettersQuestions() {
+  let qs = state.questions;
+  if (state.adminFilter) qs = qs.filter(q => q.letter === state.adminFilter);
+  if (state.adminSearch) qs = qs.filter(q => q.question.includes(state.adminSearch));
+  return qs;
+}
+
+function downloadLettersTemplate() {
+  const sheet = XLSX.utils.aoa_to_sheet([
+    ['الحرف', 'السؤال', 'الجواب'],
+    ['أ', 'اسم حيوان يبدأ بحرف أ؟', 'أرنب'],
+    ['ب', 'مدينة تبدأ بحرف ب؟', 'بيروت']
+  ]);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, 'الحروف');
+  XLSX.writeFile(workbook, 'letters-template.xlsx');
+}
+
+async function handleLettersFileUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('uploadProgress').classList.remove('hidden');
+  const bar = document.getElementById('uploadBar');
+  const status = document.getElementById('uploadStatus');
+  const reader = new FileReader();
+  reader.onload = async function(ev) {
+    const workbook = XLSX.read(ev.target.result, { type: 'binary' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    const dataRows = rows.slice(1).filter(r => r.length >= 2);
+    const total = dataRows.length;
+    const lettersSet = new Set();
+    let count = 0;
+    for (const row of dataRows) {
+      const letter = (row[0] || '').toString().trim();
+      const question = (row[1] || '').toString().trim();
+      const answer = (row[2] || '').toString().trim();
+      if (!letter || !question) continue;
+      lettersSet.add(letter);
+      count++;
+      const pct = total ? Math.round((count / total) * 100) : 100;
+      bar.style.width = pct + '%';
+      status.textContent = `جاري التحميل... ${count}/${total} سؤال | ${lettersSet.size} حرف`;
+      await db.ref('letterQuestions').push({ letter, question, answer });
+      await new Promise(r => setTimeout(r, 20));
+    }
+    status.textContent = `✅ تم رفع ${count} سؤال في ${lettersSet.size} حرف`;
+    bar.style.width = '100%';
+    await loadQuestionsFromFirebase();
+    setTimeout(() => renderAdmin(), 800);
+  };
+  reader.readAsBinaryString(file);
+}
+
+async function deleteLettersQuestion(id) {
+  await db.ref('letterQuestions/' + id).remove();
+  await loadQuestionsFromFirebase();
+  renderAdmin();
+}
+
+async function deleteLettersLetter(letter) {
+  const qs = state.questions.filter(q => q.letter === letter);
+  const updates = {};
+  qs.forEach(q => { updates[q.id] = null; });
+  await db.ref('letterQuestions').update(updates);
+  await loadQuestionsFromFirebase();
+  renderAdmin();
+}
+
+function editLettersQuestion(id) {
+  const q = state.questions.find(x => x.id === id);
+  if (!q) return;
+  const modal = document.getElementById('editModal');
+  modal.classList.remove('hidden');
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl fade-in" onclick="event.stopPropagation()">
+      <h3 class="text-lg font-bold mb-4">✏️ تعديل سؤال الحرف</h3>
+      <div class="space-y-3">
+        <div><label class="text-sm text-gray-500">الحرف</label><input id="eqLetter" value="${q.letter}" class="w-full px-3 py-2 border rounded-lg outline-none"></div>
+        <div><label class="text-sm text-gray-500">السؤال</label><input id="eqQ" value="${q.question}" class="w-full px-3 py-2 border rounded-lg outline-none"></div>
+        <div><label class="text-sm text-gray-500">الجواب</label><input id="eqAns" value="${q.answer || ''}" class="w-full px-3 py-2 border rounded-lg outline-none"></div>
+      </div>
+      <div class="flex gap-2 mt-4">
+        <button onclick="saveLettersEditQ('${id}')" class="flex-1 py-2 bg-emerald-500 text-white rounded-lg font-bold hover:bg-emerald-600">حفظ</button>
+        <button onclick="document.getElementById('editModal').classList.add('hidden')" class="flex-1 py-2 bg-gray-200 rounded-lg font-bold hover:bg-gray-300">إلغاء</button>
+      </div>
+    </div>`;
+  modal.onclick = () => modal.classList.add('hidden');
+}
+
+async function saveLettersEditQ(id) {
+  await db.ref('letterQuestions/' + id).update({
+    letter: document.getElementById('eqLetter').value.trim(),
+    question: document.getElementById('eqQ').value.trim(),
+    answer: document.getElementById('eqAns').value.trim()
+  });
+  document.getElementById('editModal').classList.add('hidden');
+  await loadQuestionsFromFirebase();
+  renderAdmin();
+}
 
 function renderAdmin() {
+  if (isLettersMode()) {
+    renderLettersAdmin();
+    return;
+  }
   const app = getApp();
   app.innerHTML = `
     <div class="h-full w-full overflow-auto p-4">
@@ -1674,6 +2369,12 @@ function showToast(msg) {
   firebase.database().ref('.info/serverTimeOffset').on('value', snap => {
     state.serverTimeOffset = Number(snap.val() || 0);
   });
+  const params = new URLSearchParams(window.location.search);
+  const hasDirectRoute = params.get('room') || params.get('game') || params.get('panel');
+  if (hasDirectRoute) {
+    checkUrlForRoom();
+    return;
+  }
   await loadQuestionsFromFirebase();
   const restored = await restoreRoomSession();
   if (!restored) checkUrlForRoom();
