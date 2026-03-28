@@ -104,7 +104,13 @@ let state = {
   lettersWinnerPickerOpen: false,
   lettersTransientTimeout: null,
   lettersTeamAssignmentTarget: '',
-  lettersAnswerPickerOpen: false
+  lettersAnswerPickerOpen: false,
+  adminButtonVisible: false,
+  adminAuthorized: false,
+  adminView: 'monitor',
+  adminRooms: [],
+  adminReturnMode: '',
+  spectatorMode: false
 };
 
 const COLORS = [
@@ -124,12 +130,18 @@ const LETTERS_PLAYER_LIMIT = 4;
 const LETTERS_TEAM_LIMIT = 2;
 const LETTERS_LIVE_RESULT_DURATION = 2600;
 const LETTERS_SHARE_VERSION = '20260328-2';
+const ADMIN_PASSWORD = '123456';
+const ACTIVE_MONITOR_STATUSES = {
+  quiz: ['game', 'loading', 'question', 'evaluating', 'result', 'noAnswer'],
+  letters: ['game']
+};
 const LETTERS_TEAMS = [
   { id: 'green', name: 'الفريق الأخضر', hex: '#16a34a', soft: '#dcfce7' },
   { id: 'red', name: 'الفريق الأحمر', hex: '#ef4444', soft: '#fee2e2' }
 ];
 
 let clickTimes = [];
+let adminRoomCollections = { quiz: {}, letters: {} };
 let defaultConfig = { game_title: 'الميدان' };
 let config = { ...defaultConfig };
 
@@ -573,7 +585,8 @@ function resetRoomState({ markOffline = false, clearSession = true } = {}) {
     lettersWinnerPickerOpen: false,
     lettersTransientTimeout: null,
     lettersTeamAssignmentTarget: '',
-    lettersAnswerPickerOpen: false
+    lettersAnswerPickerOpen: false,
+    spectatorMode: false
   };
   window.history.replaceState({}, '', state.gameMode ? buildModeLink(state.gameMode) : window.location.pathname);
   renderCurrentPage();
@@ -625,11 +638,12 @@ function toggleHostPanel(forceState) {
   syncHostOverlay();
 }
 function renderExitOverlay() {
+  const isSpectator = !!state.spectatorMode;
   return `
     <div class="fixed top-3 left-3 z-[1100]">
-      <button onclick="exitRoom()" class="h-10 rounded-full bg-white/95 text-slate-800 px-4 shadow-xl border border-slate-200 backdrop-blur flex items-center justify-center gap-2 text-sm font-black hover:bg-white transition">
+      <button onclick="${isSpectator ? 'exitSpectatorVisit()' : 'exitRoom()'}" class="h-10 rounded-full bg-white/95 text-slate-800 px-4 shadow-xl border border-slate-200 backdrop-blur flex items-center justify-center gap-2 text-sm font-black hover:bg-white transition">
         <span>⟵</span>
-        <span>خروج</span>
+        <span>${isSpectator ? 'خروج من الزيارة' : 'خروج'}</span>
       </button>
     </div>`;
 }
@@ -803,6 +817,10 @@ async function kickPlayer(playerId) {
   showToast(`تم طرد ${player.name}`);
 }
 async function exitRoom(skipConfirm = false) {
+  if (state.spectatorMode) {
+    exitSpectatorVisit();
+    return;
+  }
   if (!state.roomId || !state.playerId) {
     resetRoomState();
     return;
@@ -821,13 +839,47 @@ async function exitRoom(skipConfirm = false) {
   resetRoomState({ markOffline: false, clearSession: false });
 }
 
+function exitSpectatorVisit(message = '') {
+  clearQuestionTimers();
+  clearStageTimeout();
+  clearLettersTransientTimeout();
+  cleanupListeners();
+  stopPresenceTracking(false);
+  clearRoomSession();
+  state = {
+    ...state,
+    page: 'admin',
+    roomId: '',
+    room: null,
+    playerId: '',
+    playerName: '',
+    isHost: false,
+    chatOpen: false,
+    chatMessages: [],
+    chatDraft: '',
+    unreadCount: 0,
+    hostPanelOpen: false,
+    lettersPanel: '',
+    spectatorMode: false,
+    lettersWinnerPickerOpen: false,
+    lettersTransientTimeout: null,
+    lettersTeamAssignmentTarget: '',
+    lettersAnswerPickerOpen: false,
+    adminView: 'monitor'
+  };
+  listenAdminMonitor();
+  renderCurrentPage();
+  if (message) showToast(message);
+}
+
 // Track rapid clicks for admin
 document.addEventListener('click', () => {
   const now = Date.now();
   clickTimes.push(now);
   clickTimes = clickTimes.filter(t => now - t < 2000);
   if (clickTimes.length >= 5 && state.page === 'home') {
-    document.getElementById('adminBtn')?.classList.remove('hidden');
+    state.adminButtonVisible = true;
+    renderCurrentPage();
     clickTimes = [];
   }
 });
@@ -839,6 +891,10 @@ function listenRoom(roomId) {
   const cb = ref.on('value', snap => {
     const data = snap.val();
     if (!data) {
+      if (state.spectatorMode) {
+        exitSpectatorVisit('انتهت هذه الغرفة');
+        return;
+      }
       if (state.roomId) resetRoomState();
       return;
     }
@@ -1022,6 +1078,13 @@ function goLanding() {
   renderCurrentPage();
 }
 
+function renderAdminUnlockButton() {
+  return `
+    <button id="adminBtn" onclick="goAdmin()" class="${state.adminButtonVisible ? '' : 'hidden '}mt-6 px-6 py-2 bg-gray-800 text-white rounded-lg text-sm font-bold hover:bg-gray-700 transition">
+      🔐 Admin
+    </button>`;
+}
+
 function renderGamesLanding() {
   const app = getApp();
   app.innerHTML = `
@@ -1068,6 +1131,9 @@ function renderGamesLanding() {
             </div>
           </button>
         </div>
+        <div class="text-center">
+          ${renderAdminUnlockButton()}
+        </div>
       </div>
     </div>`;
 }
@@ -1102,9 +1168,7 @@ function renderHome(joinMode = false) {
             </button>
           `}
         </div>
-        <button id="adminBtn" onclick="goAdmin()" class="hidden mt-6 px-6 py-2 bg-gray-800 text-white rounded-lg text-sm font-bold hover:bg-gray-700 transition">
-          🔐 Admin
-        </button>
+        ${renderAdminUnlockButton()}
       </div>
     </div>`;
 }
@@ -1131,9 +1195,7 @@ function renderLettersHome(joinMode = false) {
             </button>
           `}
         </div>
-        <button id="adminBtn" onclick="goAdmin()" class="hidden mt-6 px-6 py-2 bg-gray-800 text-white rounded-lg text-sm font-bold hover:bg-gray-700 transition">
-          🔐 Admin
-        </button>
+        ${renderAdminUnlockButton()}
       </div>
     </div>`;
 }
@@ -1558,6 +1620,10 @@ async function listenLettersRoom(roomId) {
   const cb = ref.on('value', snap => {
     const data = snap.val();
     if (!data) {
+      if (state.spectatorMode) {
+        exitSpectatorVisit('انتهت هذه الغرفة');
+        return;
+      }
       resetRoomState();
       return;
     }
@@ -1969,6 +2035,7 @@ function renderLettersHostFooterActions(room = state.room) {
 
 function renderLettersGameChatPanel() {
   const msgs = state.chatMessages || [];
+  const readOnly = state.spectatorMode || !state.playerId;
   return `
     <div class="bg-white rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden flex flex-col h-[320px] md:h-[360px]">
       <div class="flex items-center justify-between p-4 border-b border-slate-100">
@@ -1979,8 +2046,8 @@ function renderLettersGameChatPanel() {
         ${renderLettersChatMessagesMarkup(msgs, state.room)}
       </div>
       <form onsubmit="sendChat(event, 'lettersChatInput')" class="p-3 border-t border-slate-100 flex gap-2">
-        <input id="lettersChatInput" value="${escapeHtml(state.chatDraft)}" oninput="rememberChatDraft(this.value)" type="text" placeholder="اكتب رسالة..." class="flex-1 px-3 py-2 border rounded-xl outline-none focus:border-emerald-400" maxlength="200">
-        <button type="submit" class="px-4 py-2 bg-emerald-500 text-white rounded-xl font-black hover:bg-emerald-600 transition">إرسال</button>
+        <input id="lettersChatInput" value="${escapeHtml(state.chatDraft)}" oninput="rememberChatDraft(this.value)" type="text" placeholder="${readOnly ? 'الزيارة للمشاهدة فقط' : 'اكتب رسالة...'}" class="flex-1 px-3 py-2 border rounded-xl outline-none focus:border-emerald-400 ${readOnly ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''}" maxlength="200" ${readOnly ? 'disabled' : ''}>
+        <button type="submit" class="px-4 py-2 rounded-xl font-black transition ${readOnly ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-emerald-500 text-white hover:bg-emerald-600'}" ${readOnly ? 'disabled' : ''}>إرسال</button>
       </form>
     </div>`;
 }
@@ -2548,6 +2615,7 @@ function renderQuestion() {
       .filter(p => getAnswerChoice(answers[p.id]) === opt)
       .sort((a, b) => Number(answerOrders[a.id] || Number.MAX_SAFE_INTEGER) - Number(answerOrders[b.id] || Number.MAX_SAFE_INTEGER))
   ]));
+  const canAnswer = !!state.playerId && !state.spectatorMode && !myAnswer;
 
   // Timer
   const elapsed = q.startTime ? Math.floor((estimatedServerNow() - q.startTime) / 1000) : 0;
@@ -2572,9 +2640,9 @@ function renderQuestion() {
               const letter = ['أ', 'ب', 'ج', 'د'][i];
               const isSelected = myAnswer === opt;
               const voters = optionVotes[opt] || [];
-              return `<button onclick="${myAnswer ? '' : `submitAnswer('${opt.replace(/'/g, "\\'")}')`}"
-                class="w-full p-3 rounded-xl border-2 text-right font-bold transition ${isSelected ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : myAnswer ? 'border-gray-100 bg-gray-50 text-gray-400' : 'border-gray-200 bg-white hover:border-indigo-300 text-gray-700'}"
-                ${myAnswer ? 'disabled' : ''}>
+              return `<button onclick="${canAnswer ? `submitAnswer('${opt.replace(/'/g, "\\'")}')` : ''}"
+                class="w-full p-3 rounded-xl border-2 text-right font-bold transition ${isSelected ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : !canAnswer ? 'border-gray-100 bg-gray-50 text-gray-400' : 'border-gray-200 bg-white hover:border-indigo-300 text-gray-700'}"
+                ${canAnswer ? '' : 'disabled'}>
                 <div class="flex items-start gap-2">
                   <span class="inline-block w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 text-xs leading-6 text-center shrink-0">${letter}</span>
                   <div class="flex-1">
@@ -2594,7 +2662,7 @@ function renderQuestion() {
             }).join('')}
           </div>
         </div>
-        ${myAnswer ? '<p class="text-green-500 font-bold text-sm">✓ تم إرسال إجابتك</p>' : ''}
+        ${state.spectatorMode ? '<p class="text-slate-400 font-bold text-sm">وضع زيارة فقط</p>' : myAnswer ? '<p class="text-green-500 font-bold text-sm">✓ تم إرسال إجابتك</p>' : ''}
         <p class="text-gray-400 text-xs">أجاب ${Object.keys(answers).length}/${players.length}</p>
       </div>
     </div>`;
@@ -2818,6 +2886,7 @@ async function proceedToNext(expectedStatus = '') {
 // ====== WINNER ======
 function renderInlineChatPanel() {
   const msgs = state.chatMessages || [];
+  const readOnly = state.spectatorMode || !state.playerId;
   return `
     <div class="bg-white/95 rounded-t-2xl rounded-b-none shadow-xl border border-slate-200 overflow-hidden">
       <div class="flex items-center justify-between p-4 border-b border-slate-100">
@@ -2837,8 +2906,8 @@ function renderInlineChatPanel() {
         `).join('')}
       </div>
       <form onsubmit="sendChat(event, 'chatInput')" class="p-3 border-t border-slate-100 flex gap-2">
-        <input id="chatInput" value="${escapeHtml(state.chatDraft)}" oninput="rememberChatDraft(this.value)" type="text" placeholder="اكتب رسالة..." class="flex-1 px-3 py-2 border rounded-lg outline-none focus:border-indigo-400" maxlength="200">
-        <button type="submit" class="px-4 py-2 bg-indigo-500 text-white rounded-lg font-bold hover:bg-indigo-600 transition">إرسال</button>
+        <input id="chatInput" value="${escapeHtml(state.chatDraft)}" oninput="rememberChatDraft(this.value)" type="text" placeholder="${readOnly ? 'الزيارة للمشاهدة فقط' : 'اكتب رسالة...'}" class="flex-1 px-3 py-2 border rounded-lg outline-none focus:border-indigo-400 ${readOnly ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''}" maxlength="200" ${readOnly ? 'disabled' : ''}>
+        <button type="submit" class="px-4 py-2 rounded-lg font-bold transition ${readOnly ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-indigo-500 text-white hover:bg-indigo-600'}" ${readOnly ? 'disabled' : ''}>إرسال</button>
       </form>
     </div>`;
 }
@@ -2950,6 +3019,7 @@ function toggleChat() {
 function renderChatModal() {
   if (!state.chatOpen) return '';
   const msgs = state.chatMessages || [];
+  const readOnly = state.spectatorMode || !state.playerId;
   return `
     <div class="fixed inset-0 bg-black/40 z-50 flex items-end justify-center p-4" onclick="if(event.target===this)toggleChat()">
       <div class="bg-white rounded-t-2xl w-full max-w-md max-h-[70%] flex flex-col shadow-2xl fade-in" onclick="event.stopPropagation()">
@@ -2970,8 +3040,8 @@ function renderChatModal() {
           `).join('')}
         </div>
         <form onsubmit="sendChat(event, 'chatInput')" class="p-3 border-t flex gap-2">
-          <input id="chatInput" value="${escapeHtml(state.chatDraft)}" oninput="rememberChatDraft(this.value)" type="text" placeholder="اكتب رسالة..." class="flex-1 px-3 py-2 border rounded-lg outline-none focus:border-indigo-400" maxlength="200">
-          <button type="submit" class="px-4 py-2 bg-indigo-500 text-white rounded-lg font-bold hover:bg-indigo-600 transition">إرسال</button>
+          <input id="chatInput" value="${escapeHtml(state.chatDraft)}" oninput="rememberChatDraft(this.value)" type="text" placeholder="${readOnly ? 'الزيارة للمشاهدة فقط' : 'اكتب رسالة...'}" class="flex-1 px-3 py-2 border rounded-lg outline-none focus:border-indigo-400 ${readOnly ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''}" maxlength="200" ${readOnly ? 'disabled' : ''}>
+          <button type="submit" class="px-4 py-2 rounded-lg font-bold transition ${readOnly ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-indigo-500 text-white hover:bg-indigo-600'}" ${readOnly ? 'disabled' : ''}>إرسال</button>
         </form>
       </div>
     </div>`;
@@ -2979,6 +3049,10 @@ function renderChatModal() {
 
 async function sendChat(e, inputId = 'chatInput') {
   e.preventDefault();
+  if (state.spectatorMode || !state.playerId) {
+    showToast('الزيارة للمشاهدة فقط');
+    return;
+  }
   const input = document.getElementById(inputId);
   const text = input.value.trim();
   if (!text) return;
@@ -3016,9 +3090,215 @@ async function sendChat(e, inputId = 'chatInput') {
 
 // ====== ADMIN ======
 async function goAdmin() {
-  await loadQuestionsFromFirebase();
+  if (!state.adminAuthorized) {
+    const password = window.prompt('أدخل كلمة سر الأدمن');
+    if (password === null) return;
+    if (password !== ADMIN_PASSWORD) {
+      showToast('كلمة السر غير صحيحة');
+      return;
+    }
+    state.adminAuthorized = true;
+    state.adminButtonVisible = true;
+  }
+  state.adminReturnMode = state.gameMode || '';
+  state.adminView = 'monitor';
   state.page = 'admin';
+  listenAdminMonitor();
   renderCurrentPage();
+}
+
+function getAdminTabClass(view) {
+  return state.adminView === view
+    ? 'bg-slate-900 text-white shadow-lg'
+    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50';
+}
+
+function renderAdminTabs() {
+  return `
+    <div class="flex flex-wrap gap-2">
+      <button onclick="switchAdminView('monitor')" class="px-4 py-2 rounded-xl text-sm font-black transition ${getAdminTabClass('monitor')}">الغرف الشغالة</button>
+      <button onclick="switchAdminView('quizQuestions')" class="px-4 py-2 rounded-xl text-sm font-black transition ${getAdminTabClass('quizQuestions')}">أسئلة الميدان</button>
+      <button onclick="switchAdminView('lettersQuestions')" class="px-4 py-2 rounded-xl text-sm font-black transition ${getAdminTabClass('lettersQuestions')}">أسئلة الحروف</button>
+    </div>`;
+}
+
+function getAdminStatusLabel(status = '') {
+  const labels = {
+    game: 'جاري اللعب',
+    loading: 'تحميل السؤال',
+    question: 'السؤال معروض',
+    evaluating: 'تحليل الإجابات',
+    result: 'إجابة صحيحة',
+    noAnswer: 'بدون إجابة',
+    winner: 'انتهت اللعبة'
+  };
+  return labels[status] || status || '—';
+}
+
+function isMonitorActiveRoom(room, game = 'quiz') {
+  return ACTIVE_MONITOR_STATUSES[game]?.includes(room?.status || '');
+}
+
+function rebuildAdminRooms() {
+  const rooms = [];
+  Object.entries(adminRoomCollections.quiz || {}).forEach(([id, room]) => {
+    if (!isMonitorActiveRoom(room, 'quiz')) return;
+    const players = room?.players ? Object.values(room.players) : [];
+    const online = players.filter(player => room?.presence?.[player.id]?.online).length;
+    rooms.push({
+      id,
+      roomId: room?.id || id,
+      game: 'quiz',
+      title: 'ميدان الأسئلة',
+      status: room?.status || '',
+      peopleCount: players.length,
+      onlineCount: online,
+      createdAt: Number(room?.currentQ?.startTime || room?.currentQ?.loadingAt || room?.created || 0)
+    });
+  });
+  Object.entries(adminRoomCollections.letters || {}).forEach(([id, room]) => {
+    if (!isMonitorActiveRoom(room, 'letters')) return;
+    const players = room?.players ? Object.values(room.players) : [];
+    const online = players.filter(player => room?.presence?.[player.id]?.online).length;
+    rooms.push({
+      id,
+      roomId: room?.id || id,
+      game: 'letters',
+      title: 'ميدان الحروف',
+      status: room?.status || '',
+      peopleCount: players.length,
+      onlineCount: online,
+      createdAt: Number(room?.letters?.winnerAt || room?.letters?.liveResult?.shownAt || room?.created || 0)
+    });
+  });
+  state.adminRooms = rooms.sort((a, b) => (b.createdAt - a.createdAt) || String(a.roomId).localeCompare(String(b.roomId)));
+}
+
+function listenAdminMonitor() {
+  cleanupListeners();
+  adminRoomCollections = { quiz: {}, letters: {} };
+  [
+    { key: 'quiz', ref: db.ref('rooms') },
+    { key: 'letters', ref: db.ref('letterRooms') }
+  ].forEach(source => {
+    const cb = source.ref.on('value', snap => {
+      adminRoomCollections[source.key] = snap.val() || {};
+      rebuildAdminRooms();
+      if (state.page === 'admin' && state.adminView === 'monitor') {
+        renderCurrentPage();
+      }
+    });
+    state.listeners.push({ ref: source.ref, cb });
+  });
+}
+
+async function switchAdminView(view) {
+  state.adminFilter = '';
+  state.adminSearch = '';
+  state.adminView = view;
+  if (view === 'monitor') {
+    listenAdminMonitor();
+    renderCurrentPage();
+    return;
+  }
+  cleanupListeners();
+  state.gameMode = view === 'lettersQuestions' ? 'letters' : 'quiz';
+  await loadQuestionsFromFirebase();
+  renderCurrentPage();
+}
+
+async function visitRoomAsSpectator(game, roomId) {
+  if (!game || !roomId) return;
+  clearQuestionTimers();
+  clearStageTimeout();
+  clearLettersTransientTimeout();
+  cleanupListeners();
+  stopPresenceTracking(false);
+  clearRoomSession();
+  state = {
+    ...state,
+    gameMode: game,
+    roomId,
+    room: null,
+    playerId: '',
+    playerName: '',
+    isHost: false,
+    chatOpen: false,
+    chatMessages: [],
+    chatDraft: '',
+    unreadCount: 0,
+    hostPanelOpen: false,
+    lettersPanel: '',
+    spectatorMode: true,
+    lettersWinnerPickerOpen: false,
+    lettersTransientTimeout: null,
+    lettersTeamAssignmentTarget: '',
+    lettersAnswerPickerOpen: false
+  };
+  const ref = game === 'letters' ? getLettersRoomRef(roomId) : db.ref(`rooms/${roomId}`);
+  const snap = await ref.once('value');
+  const room = snap.val();
+  if (!room) {
+    state.spectatorMode = false;
+    state.page = 'admin';
+    state.adminView = 'monitor';
+    listenAdminMonitor();
+    renderCurrentPage();
+    showToast('الغرفة غير موجودة');
+    return;
+  }
+  state.room = room;
+  state.page = room.status || 'game';
+  if (game === 'letters') {
+    listenLettersRoom(roomId);
+  } else {
+    listenRoom(roomId);
+  }
+  renderCurrentPage();
+}
+
+function renderAdminMonitor() {
+  const app = getApp();
+  const rooms = state.adminRooms || [];
+  app.innerHTML = `
+    <div class="h-full w-full overflow-auto p-4">
+      <div class="max-w-5xl mx-auto fade-in">
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <div>
+            <h2 class="text-3xl font-black text-slate-900">🔐 لوحة الأدمن</h2>
+            <p class="text-sm text-slate-500 mt-1">مشاهدة الغرف الجارية كزائر صامت بدون تسجيل دخولك داخل الغرفة.</p>
+          </div>
+          <button onclick="exitAdmin()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg font-bold text-sm transition">🚪 خروج</button>
+        </div>
+        <div class="mb-5">
+          ${renderAdminTabs()}
+        </div>
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          ${rooms.map(room => `
+            <div class="bg-white rounded-[1.75rem] border border-slate-200 shadow-lg p-5">
+              <div class="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <p class="text-xs font-black tracking-[0.2em] ${room.game === 'letters' ? 'text-emerald-600' : 'text-indigo-600'}">${room.game === 'letters' ? 'LETTERS' : 'QUIZ'}</p>
+                  <h3 class="text-xl font-black text-slate-900 mt-1">${room.title}</h3>
+                </div>
+                <span class="px-3 py-1 rounded-full text-xs font-black ${room.game === 'letters' ? 'bg-emerald-50 text-emerald-700' : 'bg-indigo-50 text-indigo-700'}">${getAdminStatusLabel(room.status)}</span>
+              </div>
+              <div class="space-y-2 text-sm text-slate-600">
+                <p><span class="font-black text-slate-800">رمز الغرفة:</span> ${room.roomId}</p>
+                <p><span class="font-black text-slate-800">عدد الداخلين:</span> ${room.peopleCount}</p>
+                <p><span class="font-black text-slate-800">المتصلون الآن:</span> ${room.onlineCount}</p>
+              </div>
+              <button onclick="visitRoomAsSpectator('${room.game}','${room.roomId}')" class="mt-4 w-full py-3 rounded-2xl bg-slate-900 text-white font-black hover:bg-slate-800 transition">زيارة كمراقب</button>
+            </div>
+          `).join('')}
+        </div>
+        ${rooms.length === 0 ? `
+          <div class="bg-white rounded-[1.75rem] border border-dashed border-slate-300 shadow-sm p-8 text-center text-slate-400 font-bold">
+            لا توجد غرف جارية حاليًا
+          </div>
+        ` : ''}
+      </div>
+    </div>`;
 }
 
 function renderLettersAdmin() {
@@ -3026,9 +3306,15 @@ function renderLettersAdmin() {
   app.innerHTML = `
     <div class="h-full w-full overflow-auto p-4">
       <div class="max-w-4xl mx-auto fade-in">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-2xl font-black text-emerald-700">🔐 إدارة ميدان الحروف</h2>
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <div>
+            <h2 class="text-2xl font-black text-emerald-700">🔐 إدارة ميدان الحروف</h2>
+            <p class="text-sm text-slate-500 mt-1">رفع وتعديل أسئلة الحروف ونماذج الإكسل.</p>
+          </div>
           <button onclick="exitAdmin()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg font-bold text-sm transition">🚪 خروج</button>
+        </div>
+        <div class="mb-5">
+          ${renderAdminTabs()}
         </div>
         <div class="bg-white rounded-xl shadow p-5 mb-4">
           <h3 class="font-bold text-lg mb-3">📤 رفع ملف Excel</h3>
@@ -3194,18 +3480,20 @@ async function saveLettersEditQ(id) {
   renderAdmin();
 }
 
-function renderAdmin() {
-  if (isLettersMode()) {
-    renderLettersAdmin();
-    return;
-  }
+function renderQuizAdmin() {
   const app = getApp();
   app.innerHTML = `
     <div class="h-full w-full overflow-auto p-4">
       <div class="max-w-4xl mx-auto fade-in">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-2xl font-black text-indigo-700">🔐 لوحة الإدارة</h2>
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <div>
+            <h2 class="text-2xl font-black text-indigo-700">🔐 إدارة ميدان الأسئلة</h2>
+            <p class="text-sm text-slate-500 mt-1">رفع وتعديل التصنيفات والأسئلة والنقاط.</p>
+          </div>
           <button onclick="exitAdmin()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg font-bold text-sm transition">🚪 خروج</button>
+        </div>
+        <div class="mb-5">
+          ${renderAdminTabs()}
         </div>
         <!-- Upload -->
         <div class="bg-white rounded-xl shadow p-5 mb-4">
@@ -3265,6 +3553,18 @@ function renderAdmin() {
       </div>
     </div>
     <div id="editModal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"></div>`;
+}
+
+function renderAdmin() {
+  if (state.adminView === 'lettersQuestions') {
+    renderLettersAdmin();
+    return;
+  }
+  if (state.adminView === 'quizQuestions') {
+    renderQuizAdmin();
+    return;
+  }
+  renderAdminMonitor();
 }
 
 function getFilteredQuestions() {
@@ -3366,7 +3666,42 @@ async function saveEditQ(id) {
   renderAdmin();
 }
 
-function exitAdmin() { state.page = 'home'; renderCurrentPage(); }
+function exitAdmin() {
+  cleanupListeners();
+  clearQuestionTimers();
+  clearStageTimeout();
+  clearLettersTransientTimeout();
+  clearRoomSession();
+  state = {
+    ...state,
+    page: 'home',
+    gameMode: state.adminReturnMode || '',
+    roomId: '',
+    room: null,
+    playerId: '',
+    playerName: '',
+    isHost: false,
+    chatOpen: false,
+    chatMessages: [],
+    chatDraft: '',
+    unreadCount: 0,
+    hostPanelOpen: false,
+    lettersPanel: '',
+    spectatorMode: false,
+    adminView: 'monitor',
+    adminRooms: []
+  };
+  if (state.gameMode) {
+    window.history.replaceState({}, '', buildModeLink(state.gameMode));
+  } else {
+    const landingUrl = new URL(window.location.href);
+    landingUrl.pathname = getRoutePagePath('quiz');
+    landingUrl.search = '';
+    landingUrl.hash = '';
+    window.history.replaceState({}, '', landingUrl.toString());
+  }
+  renderCurrentPage();
+}
 
 // Utils
 function shakeEl(id) {
