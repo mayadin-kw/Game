@@ -275,9 +275,14 @@ function renderLettersChatMessagesMarkup(msgs = state.chatMessages, room = state
   if (!msgs.length) return '<p class="text-slate-400 text-sm text-center py-8">ابدأوا الدردشة أثناء اللعب</p>';
   return msgs.map(msg => {
     const appearance = getLettersChatAppearance(msg, room);
+    const sentAt = formatChatTime(msg);
+    const isMine = msg.senderId === state.playerId;
     return `
-      <div class="text-sm ${msg.senderId === state.playerId ? 'text-left' : 'text-right'}">
-        <span class="font-black" style="color:${appearance.accent}">${escapeHtml(msg.senderName)}</span>
+      <div class="text-sm ${isMine ? 'text-left' : 'text-right'}">
+        <div class="flex items-center gap-2 ${isMine ? 'justify-end' : 'justify-start'}">
+          <span class="font-black" style="color:${appearance.accent}">${escapeHtml(msg.senderName)}</span>
+          ${sentAt ? `<span class="text-[11px] text-slate-400 font-bold">${sentAt}</span>` : ''}
+        </div>
         <p class="inline-block px-3 py-2 rounded-2xl mt-1 border-2" style="background:${appearance.soft};color:${appearance.text};border-color:${appearance.border}">${escapeHtml(msg.text)}</p>
       </div>`;
   }).join('');
@@ -290,6 +295,34 @@ function updateLettersGameChatInPlace() {
   if (countEl) countEl.textContent = `${state.chatMessages.length} رسالة`;
   scrollMessagesToBottom('lettersGameChatMessages');
   return true;
+}
+function getChatTimestamp(message = {}) {
+  const stamp = Number(message?.time || message?.clientTime || 0);
+  return Number.isFinite(stamp) ? stamp : 0;
+}
+function formatChatTime(message = {}) {
+  const stamp = getChatTimestamp(message);
+  if (!stamp) return '';
+  return new Date(stamp).toLocaleTimeString('ar-KW', {
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+}
+function normalizeChatMessages(chatMap = {}) {
+  return Object.entries(chatMap)
+    .map(([id, msg]) => ({ id, ...(msg || {}) }))
+    .sort((a, b) => {
+      const orderA = Number(a.order);
+      const orderB = Number(b.order);
+      const hasOrderA = Number.isFinite(orderA);
+      const hasOrderB = Number.isFinite(orderB);
+      if (hasOrderA && hasOrderB && orderA !== orderB) return orderA - orderB;
+      const timeDelta = getChatTimestamp(a) - getChatTimestamp(b);
+      if (timeDelta !== 0) return timeDelta;
+      if (hasOrderA && !hasOrderB) return -1;
+      if (!hasOrderA && hasOrderB) return 1;
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    });
 }
 function renderLettersTeamChips(room = state.room, compact = false) {
   return LETTERS_TEAMS.map(team => {
@@ -749,7 +782,7 @@ function listenRoom(roomId) {
     }
     // Update chat
     if (data.chat) {
-      const msgs = Object.values(data.chat);
+      const msgs = normalizeChatMessages(data.chat);
       const chatVisible = state.chatOpen || state.page === 'winner';
       if (!chatVisible) {
         const newCount = msgs.length - state.chatMessages.length;
@@ -1461,7 +1494,7 @@ async function listenLettersRoom(roomId) {
       setRoomUrl(data.id || state.roomId);
     }
     if (data.chat) {
-      const msgs = Object.values(data.chat).sort((a, b) => Number(a.time || 0) - Number(b.time || 0));
+      const msgs = normalizeChatMessages(data.chat);
       const chatVisible = ['game', 'winner', 'lettersLive'].includes(state.page) || state.chatOpen;
       if (!chatVisible) {
         const newCount = msgs.length - state.chatMessages.length;
@@ -2525,7 +2558,10 @@ function renderInlineChatPanel() {
         ${msgs.length === 0 ? '<p class="text-gray-400 text-sm text-center py-8">ابدأوا الحديث بعد انتهاء اللعبة</p>' : ''}
         ${msgs.map(m => `
           <div class="text-sm ${m.senderId === state.playerId ? 'text-left' : 'text-right'}">
-            <span class="font-bold text-indigo-600">${m.senderName}</span>
+            <div class="flex items-center gap-2 ${m.senderId === state.playerId ? 'justify-end' : 'justify-start'}">
+              <span class="font-bold text-indigo-600">${m.senderName}</span>
+              ${formatChatTime(m) ? `<span class="text-[11px] text-slate-400 font-bold">${formatChatTime(m)}</span>` : ''}
+            </div>
             <p class="bg-gray-100 inline-block px-3 py-1 rounded-lg mt-0.5">${m.text}</p>
           </div>
         `).join('')}
@@ -2655,7 +2691,10 @@ function renderChatModal() {
           ${msgs.length === 0 ? '<p class="text-gray-400 text-sm text-center">لا توجد رسائل بعد</p>' : ''}
           ${msgs.map(m => `
             <div class="text-sm ${m.senderId === state.playerId ? 'text-left' : 'text-right'}">
-              <span class="font-bold text-indigo-600">${m.senderName}</span>
+              <div class="flex items-center gap-2 ${m.senderId === state.playerId ? 'justify-end' : 'justify-start'}">
+                <span class="font-bold text-indigo-600">${m.senderName}</span>
+                ${formatChatTime(m) ? `<span class="text-[11px] text-slate-400 font-bold">${formatChatTime(m)}</span>` : ''}
+              </div>
               <p class="bg-gray-100 inline-block px-3 py-1 rounded-lg mt-0.5">${m.text}</p>
             </div>
           `).join('')}
@@ -2674,17 +2713,27 @@ async function sendChat(e, inputId = 'chatInput') {
   const text = input.value.trim();
   if (!text) return;
   const me = state.room?.players?.[state.playerId] || null;
+  const messageKey = getGameRoomRef().child('chat').push().key;
+  const queuedAt = estimatedServerNow();
   state.chatDraft = '';
   input.value = '';
   try {
-    await getGameRoomRef().child('chat').push({
-      senderId: state.playerId,
-      senderName: state.playerName,
-      senderRole: me?.role || 'player',
-      senderTeam: me?.team || '',
-      text,
-      time: Date.now()
+    const tx = await getGameRoomRef().transaction(room => {
+      if (!room || !messageKey) return room;
+      room.chatSeq = Number(room.chatSeq || 0) + 1;
+      room.chat = room.chat || {};
+      room.chat[messageKey] = {
+        senderId: state.playerId,
+        senderName: state.playerName,
+        senderRole: me?.role || 'player',
+        senderTeam: me?.team || '',
+        text,
+        time: queuedAt,
+        order: room.chatSeq
+      };
+      return room;
     });
+    if (!tx.committed) throw new Error('chat-send-aborted');
     scrollMessagesToBottom(isLettersMode() && state.page === 'game' ? 'lettersGameChatMessages' : state.page === 'winner' ? 'winnerChatMessages' : 'chatMessages');
     input.focus();
   } catch (error) {
